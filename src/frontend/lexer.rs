@@ -1,7 +1,17 @@
+use std::fs;
+
 use logos::{Lexer, Logos, Span};
 
+#[derive(Debug)]
+enum LexingError {
+    ParseError,
+}
+
 #[derive(Logos, Debug, PartialEq)]
-enum Token<'src> {
+#[logos(skip r"//[^\n]*")] // skip single-line comments
+#[logos(skip r"/\*(?:[^*]|\*[^/])*\*/")] // skip multi-line comments
+#[logos(skip r"[ \t\n\f]+")] // whitespaces
+pub enum Token<'src> {
     #[token("{")]
     BraceOpen,
 
@@ -153,4 +163,17 @@ enum Token<'src> {
 
     #[regex(r"-?[0-9]*\.[0-9]+", |lex| lex.slice())]
     Float(&'src str),
+}
+
+pub fn stream(source: &str) -> Vec<Token> {
+    let lexer = Token::lexer(source);
+    let mut stream = Vec::new();
+
+    for token in lexer {
+        match token {
+            Ok(token) => stream.push(token),
+            Err(_) => panic!(),
+        }
+    }
+    stream
 }

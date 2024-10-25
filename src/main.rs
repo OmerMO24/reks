@@ -1,9 +1,17 @@
 mod frontend;
+use frontend::lexer::stream;
+use std::error::Error;
 
-use chumsky::prelude::*;
+fn main() -> Result<(), Box<dyn Error>> {
+    //let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
 
-fn main() {
-    let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
+    let src = std::fs::read_to_string("fn.reks").unwrap();
+    let vec = stream(&src);
 
-    println!("{}", src);
+    for token in vec {
+        println!("This da token: {:?}", token);
+    }
+
+    Ok(())
+    //println!("{}", src);
 }
