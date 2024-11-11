@@ -59,7 +59,14 @@ pub enum Token<'src> {
     #[token("!")]
     Not,
 
+    // Memory operators
+    #[token("&")]
+    AddressOf,
+
     // Relational and Comparison Operators
+    #[token("->")]
+    ArrowOp,
+
     #[token("==")]
     Equal,
 
@@ -163,6 +170,10 @@ pub enum Token<'src> {
 
     #[regex(r"-?[0-9]*\.[0-9]+", |lex| lex.slice())]
     Float(&'src str),
+
+    //Identifiers
+    #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice())]
+    Identifier(&'src str),
 }
 
 pub fn stream(source: &str) -> Vec<Token> {

@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 chumsky = "0.9.3"
-llvm-sys = "191.0.0"
+llvm-sys = "181.0.0"
 logos = "0.14.2"
