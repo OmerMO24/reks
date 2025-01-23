@@ -1,6 +1,7 @@
-use std::fs;
+#![allow(non_camel_case_types)]
 
 use logos::{Lexer, Logos, Span};
+use std::fs;
 
 #[derive(Debug)]
 enum LexingError {
@@ -13,178 +14,159 @@ enum LexingError {
 #[logos(skip r"[ \t\n\f]+")] // whitespaces
 pub enum Token<'src> {
     #[token("{")]
-    BraceOpen,
+    TOKEN_L_BRACE,
 
     #[token("}")]
-    BraceClose,
+    TOKEN_R_BRACE,
 
     #[token("[")]
-    BracketOpen,
+    TOKEN_L_BRACK,
 
     #[token("]")]
-    BraceketClose,
+    TOKEN_R_BRACK,
 
     #[token("(")]
-    ParenOpen,
+    TOKEN_L_PAREN,
 
     #[token(")")]
-    ParenClose,
+    TOKEN_R_PAREN,
 
     #[token(":")]
-    Colon,
+    TOKEN_COLON,
 
     #[token(";")]
-    SemiColon,
+    TOKEN_SEMICOLON,
 
     #[token(",")]
-    Comma,
+    TOKEN_COMMA,
 
     #[regex(r#""([^"\\]|\\["\\bnfrt]|u[a-fA-F0-9]{4})*""#, |lex| lex.slice())]
-    String(&'src str),
+    TOKEN_STRING(&'src str),
 
     // Loop constructs
     #[token("for")]
-    For,
+    TOKEN_FOR,
 
     #[token("while")]
-    While,
+    TOKEN_WHILE,
 
     // Logical operators
     #[token("&&")]
-    And,
+    TOKEN_AND_AND,
 
     #[token("||")]
-    Or,
+    TOKEN_OR_OR,
 
     #[token("!")]
-    Not,
+    TOKEN_NOT,
 
     // Memory operators
     #[token("&")]
-    AddressOf,
+    TOKEN_ADDRESS_OF,
 
     // Relational and Comparison Operators
     #[token("->")]
     ArrowOp,
 
     #[token("==")]
-    Equal,
+    TOKEN_EQUAL,
 
     #[token(">")]
-    GreaterThan,
+    TOKEN_GREATER,
 
     #[token("<")]
-    LessThan,
+    TOKEN_LESS,
 
     #[token(">=")]
-    GreaterThanEq,
+    TOKEN_GREATER_OR_EQ,
 
     #[token("<=")]
-    LessThanEq,
+    TOKEN_LESS_OR_EQ,
 
     #[token("!=")]
-    NotEqual,
+    TOKEN_NOT_EQ,
 
     // Arithmetic Operators
     #[token("+")]
-    Add,
+    TOKEN_ADD,
 
     #[token("-")]
-    Sub,
+    TOKEN_SUB,
 
     #[token("*")]
-    Mul,
+    TOKEN_MUL,
 
     #[token("/")]
-    Div,
+    TOKEN_DIV,
 
     #[token("^")]
-    Exp,
+    TOKEN_EXP,
 
     #[token("%")]
-    Modulo,
+    TOKEN_MOD,
 
     // Numbers
 
     //Signed Integers
     #[token("i8")]
-    I8Type,
+    TOKEN_I8,
 
     #[token("i16")]
-    I16Type,
+    TOKEN_I16,
 
     #[token("i32")]
-    I32Type,
+    TOKEN_I32,
 
     #[token("i64")]
-    I64Type,
-
-    #[token("i128")]
-    I128Type,
+    TOKEN_I64,
 
     // Unsigned Integers
     #[token("u8")]
-    U8Type,
+    TOKEN_U8,
 
     #[token("u16")]
-    U16Type,
+    TOKEN_U16,
 
     #[token("u32")]
-    U32Type,
+    TOKEN_U32,
 
     #[token("u64")]
-    U64Type,
-
-    #[token("u128")]
-    U128Type,
+    TOKEN_U64,
 
     // Floating Points
     #[token("f32")]
-    F32Type,
+    TOKEN_F32,
 
     #[token("f64")]
-    F64Type,
+    TOKEN_F64,
 
     // Keywords
     #[token("if")]
-    If,
+    TOKEN_IF,
 
     #[token("else")]
-    Else,
+    TOKEN_ELSE,
 
     #[token("fn")]
-    FunctionDecl,
+    TOKEN_FN,
 
     #[token("struct")]
-    StructDecl,
+    TOKEN_STRUCT,
 
     #[token("const")]
-    ConstDecl,
+    TOKEN_CONST,
 
     #[token("mut")]
-    MutDecl,
+    TOKEN_MUT,
 
     // Literals
     #[regex(r"-?[0-9]+", |lex| lex.slice())]
-    IntegerLiteral(&'src str),
+    TOKEN_INT(&'src str),
 
     #[regex(r"-?[0-9]*\.[0-9]+", |lex| lex.slice())]
-    Float(&'src str),
+    TOKEN_FLOAT(&'src str),
 
     //Identifiers
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice())]
-    Identifier(&'src str),
-}
-
-pub fn stream(source: &str) -> Vec<Token> {
-    let lexer = Token::lexer(source);
-    let mut stream = Vec::new();
-
-    for token in lexer {
-        match token {
-            Ok(token) => stream.push(token),
-            Err(_) => panic!(),
-        }
-    }
-    stream
+    TOKEN_IDENT(&'src str),
 }

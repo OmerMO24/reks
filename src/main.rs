@@ -1,15 +1,16 @@
 mod frontend;
-use frontend::lexer::stream;
+use frontend::lexer::Token;
+use logos::Logos;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
     //let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
 
     let src = std::fs::read_to_string("fn.reks")?;
-    let vec = stream(&src);
+    let it = Token::lexer(&src);
 
-    for token in vec {
-        println!("This da token: {:?}", token);
+    for tok in it {
+        println!("{:?}", tok.unwrap());
     }
 
     Ok(())
