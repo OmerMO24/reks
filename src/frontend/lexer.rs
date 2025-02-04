@@ -58,7 +58,7 @@ pub enum Token<'src> {
     TOKEN_OR_OR,
 
     #[token("!")]
-    TOKEN_NOT,
+    TOKEN_BANG,
 
     // Memory operators
     #[token("&")]
@@ -104,6 +104,9 @@ pub enum Token<'src> {
 
     #[token("%")]
     TOKEN_MOD,
+
+    #[token(".")]
+    TOKEN_DOT,
 
     // Numbers
 
