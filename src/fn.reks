@@ -1,3 +1,0 @@
-fn touchThings(thing: &ref) -> u8 {
-	
-}

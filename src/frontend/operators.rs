@@ -1,7 +1,8 @@
 use crate::frontend::lexer::*;
+use crate::frontend::FromKind;
 
 #[derive(Debug, Clone)]
-pub enum BinOpKind {
+pub enum InfixOpKind {
     Add,
     Sub,
     Mul,
@@ -22,46 +23,43 @@ pub enum BinOpKind {
     Dot,
 }
 
-pub enum UnaryOpKind {
+#[derive(Debug, Clone)]
+pub enum PrefixOpKind {
     Bang,
     AddressOf,
 }
 
-pub trait FromKind {
-    pub fn from_kind(token: Token) -> Option<Self>;
-}
-
-impl FromKind for BinOpKind {
+impl FromKind for InfixOpKind {
     fn from_kind(token: Token) -> Option<Self> {
         match token {
-            Token::TOKEN_ADD => Some(BinOpKind::Add),
-            Token::TOKEN_SUB => Some(BinOpKind::Sub),
-            Token::TOKEN_MUL => Some(BinOpKind::Mul),
-            Token::TOKEN_DIV => Some(BinOpKind::Div),
-            Token::TOKEN_EXP => Some(BinOpKind::Exp),
-            Token::TOKEN_MOD => Some(BinOpKind::Mod),
+            Token::TOKEN_ADD => Some(InfixOpKind::Add),
+            Token::TOKEN_SUB => Some(InfixOpKind::Sub),
+            Token::TOKEN_MUL => Some(InfixOpKind::Mul),
+            Token::TOKEN_DIV => Some(InfixOpKind::Div),
+            Token::TOKEN_EXP => Some(InfixOpKind::Exp),
+            Token::TOKEN_MOD => Some(InfixOpKind::Mod),
 
-            Token::TOKEN_AND_AND => Some(BinOpKind::And),
-            Token::TOKEN_OR_OR => Some(BinOpKind::Or),
+            Token::TOKEN_AND_AND => Some(InfixOpKind::And),
+            Token::TOKEN_OR_OR => Some(InfixOpKind::Or),
 
-            Token::TOKEN_EQUAL => Some(BinOpKind::Equals),
-            Token::TOKEN_GREATER => Some(BinOpKind::Greater),
-            Token::TOKEN_GREATER_OR_EQ => Some(BinOpKind::GreaterOrEq),
-            Token::TOKEN_LESS => Some(BinOpKind::Less),
-            Token::TOKEN_LESS_OR_EQ => Some(BinOpKind::LessOrEq),
-            Token::TOKEN_NOT_EQ => Some(BinOpKind::NotEq),
-            Token::TOKEN_DOT => Some(BinOpKind::Add),
+            Token::TOKEN_EQUAL => Some(InfixOpKind::Equals),
+            Token::TOKEN_GREATER => Some(InfixOpKind::Greater),
+            Token::TOKEN_GREATER_OR_EQ => Some(InfixOpKind::GreaterOrEq),
+            Token::TOKEN_LESS => Some(InfixOpKind::Less),
+            Token::TOKEN_LESS_OR_EQ => Some(InfixOpKind::LessOrEq),
+            Token::TOKEN_NOT_EQ => Some(InfixOpKind::NotEq),
+            Token::TOKEN_DOT => Some(InfixOpKind::Dot),
 
             _ => None,
         }
     }
 }
 
-impl FromKind for UnaryOpKind {
+impl FromKind for PrefixOpKind {
     fn from_kind(token: Token) -> Option<Self> {
         match token {
-            Token::TOKEN_BANG => Some(UnaryOpKind::Bang),
-            Token::TOKEN_ADDRESS_OF => Some(UnaryOpKind::Bang),
+            Token::TOKEN_BANG => Some(PrefixOpKind::Bang),
+            Token::TOKEN_ADDRESS_OF => Some(PrefixOpKind::Bang),
             _ => None,
         }
     }

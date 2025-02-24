@@ -1,18 +1,19 @@
 #![allow(non_camel_case_types)]
 
 use logos::{Lexer, Logos, Span};
-use std::fs;
 
 #[derive(Debug)]
 enum LexingError {
     ParseError,
 }
 
-#[derive(Logos, Debug, PartialEq)]
+#[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"//[^\n]*")] // skip single-line comments
 #[logos(skip r"/\*(?:[^*]|\*[^/])*\*/")] // skip multi-line comments
 #[logos(skip r"[ \t\n\f]+")] // whitespaces
 pub enum Token<'src> {
+    Error,
+
     #[token("{")]
     TOKEN_L_BRACE,
 
@@ -108,41 +109,6 @@ pub enum Token<'src> {
     #[token(".")]
     TOKEN_DOT,
 
-    // Numbers
-
-    //Signed Integers
-    #[token("i8")]
-    TOKEN_I8,
-
-    #[token("i16")]
-    TOKEN_I16,
-
-    #[token("i32")]
-    TOKEN_I32,
-
-    #[token("i64")]
-    TOKEN_I64,
-
-    // Unsigned Integers
-    #[token("u8")]
-    TOKEN_U8,
-
-    #[token("u16")]
-    TOKEN_U16,
-
-    #[token("u32")]
-    TOKEN_U32,
-
-    #[token("u64")]
-    TOKEN_U64,
-
-    // Floating Points
-    #[token("f32")]
-    TOKEN_F32,
-
-    #[token("f64")]
-    TOKEN_F64,
-
     // Keywords
     #[token("if")]
     TOKEN_IF,
@@ -161,6 +127,12 @@ pub enum Token<'src> {
 
     #[token("mut")]
     TOKEN_MUT,
+
+    #[token("true")]
+    TOKEN_TRUE,
+
+    #[token("false")]
+    TOKEN_FALSE,
 
     // Literals
     #[regex(r"-?[0-9]+", |lex| lex.slice())]
