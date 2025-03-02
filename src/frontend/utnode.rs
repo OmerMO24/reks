@@ -21,7 +21,7 @@ pub enum Value<'src> {
     Func(&'src str),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Const {
     Yes,
     No,
@@ -60,6 +60,12 @@ pub struct CallArg<A> {
 }
 
 #[derive(Debug, Clone)]
+pub enum TypePath<'src> {
+    Empty,
+    Typed { ident: Value<'src> },
+}
+
+#[derive(Debug, Clone)]
 pub enum UntypedExpr<'src> {
     // Values are also expressions
     Value(Value<'src>),
@@ -78,18 +84,29 @@ pub enum UntypedExpr<'src> {
     },
 
     Call {
-        name: Value<'src>,
-        args: Vec<CallArg<Self>>,
+        name: Box<Self>,
+        args: Vec<Self>,
     },
 
     BinOp {
-        op: InfixOpKind,
         left: Box<Self>,
+        op: InfixOpKind,
         right: Box<Self>,
     },
 
     UnaryOp {
         op: PrefixOpKind,
         operand: Box<Self>,
+    },
+
+    Let {
+        id: Value<'src>,
+        pat: TypePath<'src>,
+        expr: Box<Self>,
+        constness: Const,
+    },
+
+    List {
+        items: Vec<Self>,
     },
 }

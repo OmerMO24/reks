@@ -109,6 +109,9 @@ pub enum Token<'src> {
     #[token(".")]
     TOKEN_DOT,
 
+    #[token("=")]
+    TOKEN_ASSIGN,
+
     // Keywords
     #[token("if")]
     TOKEN_IF,
@@ -135,8 +138,8 @@ pub enum Token<'src> {
     TOKEN_FALSE,
 
     // Literals
-    #[regex(r"-?[0-9]+", |lex| lex.slice())]
-    TOKEN_INT(&'src str),
+    #[regex(r"-?[0-9]+", |lex| lex.slice().parse::<i64>().unwrap())]
+    TOKEN_INT(i64),
 
     #[regex(r"-?[0-9]*\.[0-9]+", |lex| lex.slice())]
     TOKEN_FLOAT(&'src str),

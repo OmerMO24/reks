@@ -1,3 +1,7 @@
-100
-200.87098705974329574
-300.0984905745302957
+const entity_vector = triple();
+
+{
+	const entity_pos: Vector = get_entity_vector(&entity);
+	make_mut(&entity_pos)
+	mut transmutation = entity_post * 500 + 3;
+}
