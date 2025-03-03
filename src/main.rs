@@ -3,7 +3,9 @@ mod reks_type;
 use chumsky::{input::Stream, prelude::*};
 use logos::Logos;
 use reks_parse::lexer::Token;
+use reks_parse::operators::*;
 use reks_parse::parser::*;
+use reks_parse::utnode::*;
 use reks_type::resolve::*;
 use std::error::Error;
 
@@ -53,5 +55,231 @@ use std::error::Error;
 // }
 
 fn main() {
-    test_name_resolver();
+    let test_variables = vec![UntypedExpr::Fn {
+        name: Value::Identifier("test"),
+        params: vec![],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![
+                UntypedExpr::Let {
+                    id: Value::Identifier("x"),
+                    pat: TypePath::Typed {
+                        ident: Value::Identifier("i32"),
+                    },
+                    expr: Box::new(UntypedExpr::Value(Value::Num(5))),
+                    constness: Const::Yes,
+                },
+                UntypedExpr::Let {
+                    id: Value::Identifier("y"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::BinOp {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                        op: InfixOpKind::Add,
+                        right: Box::new(UntypedExpr::Value(Value::Num(10))),
+                    }),
+                    constness: Const::Yes,
+                },
+                UntypedExpr::Value(Value::Identifier("y")),
+            ],
+        }),
+    }];
+
+    let test_scopes = vec![UntypedExpr::Fn {
+        name: Value::Identifier("scope_test"),
+        params: vec![],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![
+                UntypedExpr::Let {
+                    id: Value::Identifier("outer"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(10))),
+                    constness: Const::Yes,
+                },
+                UntypedExpr::Block {
+                    statements: vec![
+                        UntypedExpr::Let {
+                            id: Value::Identifier("inner"),
+                            pat: TypePath::Empty,
+                            expr: Box::new(UntypedExpr::Value(Value::Num(20))),
+                            constness: Const::Yes,
+                        },
+                        UntypedExpr::Let {
+                            id: Value::Identifier("outer"),
+                            pat: TypePath::Empty,
+                            expr: Box::new(UntypedExpr::Value(Value::Num(30))),
+                            constness: Const::Yes,
+                        },
+                        UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("outer"))),
+                            op: InfixOpKind::Add,
+                            right: Box::new(UntypedExpr::Value(Value::Identifier("inner"))),
+                        },
+                    ],
+                },
+                UntypedExpr::Value(Value::Identifier("outer")),
+            ],
+        }),
+    }];
+
+    let test_structs = vec![
+        UntypedExpr::Struct {
+            id: Value::Identifier("Point"),
+            fields: vec![
+                Param {
+                    name: Value::Identifier("x"),
+                    ty: Value::Identifier("f32"),
+                },
+                Param {
+                    name: Value::Identifier("y"),
+                    ty: Value::Identifier("f32"),
+                },
+            ],
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("calculate_distance"),
+            params: vec![
+                Param {
+                    name: Value::Identifier("p1"),
+                    ty: Value::Identifier("Point"),
+                },
+                Param {
+                    name: Value::Identifier("p2"),
+                    ty: Value::Identifier("Point"),
+                },
+            ],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("f32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("dx"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::FieldAccess {
+                                id: Box::new(UntypedExpr::Value(Value::Identifier("p2"))),
+                                field: Value::Identifier("x"),
+                            }),
+                            op: InfixOpKind::Sub,
+                            right: Box::new(UntypedExpr::FieldAccess {
+                                id: Box::new(UntypedExpr::Value(Value::Identifier("p1"))),
+                                field: Value::Identifier("x"),
+                            }),
+                        }),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("dy"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::FieldAccess {
+                                id: Box::new(UntypedExpr::Value(Value::Identifier("p2"))),
+                                field: Value::Identifier("y"),
+                            }),
+                            op: InfixOpKind::Sub,
+                            right: Box::new(UntypedExpr::FieldAccess {
+                                id: Box::new(UntypedExpr::Value(Value::Identifier("p1"))),
+                                field: Value::Identifier("y"),
+                            }),
+                        }),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::BinOp {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("dx"))),
+                        op: InfixOpKind::Add,
+                        right: Box::new(UntypedExpr::Value(Value::Identifier("dy"))),
+                    },
+                ],
+            }),
+        },
+    ];
+
+    let test_function_calls = vec![
+        UntypedExpr::Fn {
+            name: Value::Identifier("add"),
+            params: vec![
+                Param {
+                    name: Value::Identifier("a"),
+                    ty: Value::Identifier("i32"),
+                },
+                Param {
+                    name: Value::Identifier("b"),
+                    ty: Value::Identifier("i32"),
+                },
+            ],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("a"))),
+                    op: InfixOpKind::Add,
+                    right: Box::new(UntypedExpr::Value(Value::Identifier("b"))),
+                }],
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("compute"),
+            params: vec![],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("x"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(5))),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("y"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(10))),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::Call {
+                        name: Box::new(UntypedExpr::Value(Value::Identifier("add"))),
+                        args: vec![
+                            UntypedExpr::Value(Value::Identifier("x")),
+                            UntypedExpr::Value(Value::Identifier("y")),
+                        ],
+                    },
+                ],
+            }),
+        },
+    ];
+
+    let test_conditionals = vec![UntypedExpr::Fn {
+        name: Value::Identifier("max"),
+        params: vec![
+            Param {
+                name: Value::Identifier("a"),
+                ty: Value::Identifier("i32"),
+            },
+            Param {
+                name: Value::Identifier("b"),
+                ty: Value::Identifier("i32"),
+            },
+        ],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![UntypedExpr::If {
+                condition: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("a"))),
+                    op: InfixOpKind::Greater,
+                    right: Box::new(UntypedExpr::Value(Value::Identifier("b"))),
+                }),
+                then_branch: Box::new(UntypedExpr::Block {
+                    statements: vec![UntypedExpr::Value(Value::Identifier("a"))],
+                }),
+                else_branch: Box::new(UntypedExpr::Block {
+                    statements: vec![UntypedExpr::Value(Value::Identifier("b"))],
+                }),
+            }],
+        }),
+    }];
+
+    run_test("Variable Declaration and Use", &test_variables);
+    run_test("Nested Scopes and Shadowing", &test_scopes);
+    run_test("Struct Declaration and Field Access", &test_structs);
+    run_test("Function Calls", &test_function_calls);
+    run_test("Conditional Logic", &test_conditionals);
+
+    //test_name_resolver();
 }
