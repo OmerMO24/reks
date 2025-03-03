@@ -6,6 +6,6 @@ edition = "2021"
 [dependencies]
 chumsky = { git = "https://github.com/zesterer/chumsky"}
 #clap = "4.5.31"
-#llvm-sys = "181.0.0"
+llvm-sys = "181.0.0"
 logos = "0.14.2"
 #peekmore = "1.3.0"
