@@ -67,7 +67,7 @@ pub enum Token<'src> {
 
     // Relational and Comparison Operators
     #[token("->")]
-    ArrowOp,
+    TOKEN_ARROW,
 
     #[token("==")]
     TOKEN_EQUAL,

@@ -1,5 +1,4 @@
 use super::operators::{InfixOpKind, PrefixOpKind};
-use crate::frontend::{lexer, operators};
 
 #[derive(Debug, Clone)]
 pub enum RetTy<'src> {
@@ -16,9 +15,6 @@ pub enum Value<'src> {
     String(&'src str),
     Num(i64),
     Float(f64),
-    Bool(bool),
-    List(Vec<Self>),
-    Func(&'src str),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -27,36 +23,10 @@ pub enum Const {
     No,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Param<'src> {
-    name: Value<'src>,
-    ty: Value<'src>,
-}
-
-#[derive(Debug)]
-pub struct FnDecl<'src> {
-    constness: Const,
-    inputs: Vec<Param<'src>>,
-    output: RetTy<'src>,
-}
-
-// I like this abstraction
-// NVM my previous assumptions were wrong
-#[derive(Debug, Clone)]
-pub enum ArgNames<'src> {
-    Named {
-        name: Value<'src>,
-    },
-
-    Labelled {
-        name: Value<'src>,
-        label: Value<'src>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub struct CallArg<A> {
-    pub value: A,
+    pub name: Value<'src>,
+    pub ty: Value<'src>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,12 +45,11 @@ pub enum UntypedExpr<'src> {
         statements: Vec<UntypedExpr<'src>>,
     },
 
-    // allocate here but whatever
     Fn {
         name: Value<'src>,
-        args: Vec<ArgNames<'src>>,
-        body: Vec<UntypedExpr<'src>>,
-        return_annotation: Value<'src>,
+        params: Vec<Param<'src>>,
+        retty: Box<Self>,
+        body: Box<Self>,
     },
 
     Call {
@@ -108,5 +77,26 @@ pub enum UntypedExpr<'src> {
 
     List {
         items: Vec<Self>,
+    },
+
+    Struct {
+        id: Value<'src>,
+        fields: Vec<Param<'src>>,
+    },
+
+    If {
+        condition: Box<Self>,
+        then_branch: Box<Self>,
+        else_branch: Box<Self>,
+    },
+
+    FieldAccess {
+        id: Box<Self>,
+        field: Value<'src>,
+    },
+
+    Assign {
+        left: Box<Self>,
+        right: Box<Self>,
     },
 }

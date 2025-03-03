@@ -3,7 +3,7 @@ pub mod operators;
 pub mod parser;
 pub mod utnode;
 
-use crate::frontend::lexer::Token;
+use crate::reks_parse::lexer::Token;
 
 // Used to go from a token to some sort of AST representation
 pub trait FromKind {

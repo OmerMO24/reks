@@ -1,5 +1,5 @@
-use crate::frontend::lexer::*;
-use crate::frontend::FromKind;
+use crate::reks_parse::lexer::*;
+use crate::reks_parse::FromKind;
 
 #[derive(Debug, Clone)]
 pub enum InfixOpKind {

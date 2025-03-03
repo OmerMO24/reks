@@ -1,7 +1,1 @@
-const entity_vector = triple();
-
-{
-	const entity_pos: Vector = get_entity_vector(&entity);
-	make_mut(&entity_pos)
-	mut transmutation = entity_post * 500 + 3;
-}
+mask.lower_mask = boom() + doom; 
