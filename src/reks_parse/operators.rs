@@ -20,6 +20,8 @@ pub enum InfixOpKind {
     LessOrEq,
     NotEq,
 
+    Assign,
+
     Dot,
 }
 

@@ -6,6 +6,7 @@ use reks_parse::lexer::Token;
 use reks_parse::operators::*;
 use reks_parse::parser::*;
 use reks_parse::utnode::*;
+use reks_type::infer::*;
 use reks_type::resolve::*;
 use std::error::Error;
 
@@ -283,5 +284,6 @@ fn main() {
 
     //test_name_resolver();
     //test_complex_nesting();
-    test_manual_verification();
+    //test_manual_verification();
+    test_type_inference();
 }
