@@ -285,5 +285,8 @@ fn main() {
     //test_name_resolver();
     //test_complex_nesting();
     //test_manual_verification();
-    test_type_inference();
+    //test_type_inference(); passed
+    //test_unannotated_let_inference(); passed
+    //test_all_unknowns_inference(); passed
+    test_function_call_inference();
 }

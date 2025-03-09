@@ -283,7 +283,7 @@ impl TypeInferencer {
 
     fn type_from_annotation(&self, type_name: &str) -> Result<Type, TypeError> {
         match type_name {
-            "i32" | "i64" => Ok(Type::Int),
+            "i8" | "i32" | "i64" => Ok(Type::Int),
             "f64" => Ok(Type::Float),
             "bool" => Ok(Type::Bool),
             "string" => Ok(Type::String),
@@ -383,6 +383,303 @@ pub fn test_type_inference() {
                     TypeInfo::Known(t) => println!("Expr {}: Known {:?}", i, t),
                     TypeInfo::Inferred(t) => println!("Expr {}: Inferred {:?}", i, t),
                     TypeInfo::Unknown => println!("Expr {}: Unknown", i),
+                }
+            }
+        }
+        Err(errors) => {
+            println!("Type errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+        }
+    }
+}
+
+// New Test for Unannotated Let Expressions
+pub fn test_unannotated_let_inference() {
+    let test_program = vec![UntypedExpr::Fn {
+        name: Value::Identifier("main"),
+        params: vec![],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![
+                // const x = 55;
+                UntypedExpr::Let {
+                    id: Value::Identifier("x"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(55))),
+                    constness: Const::Yes,
+                },
+                // // const y: i8 = 55;
+                // UntypedExpr::Let {
+                //     id: Value::Identifier("y"),
+                //     pat: TypePath::Typed {
+                //         ident: Value::Identifier("i8"),
+                //     },
+                //     expr: Box::new(UntypedExpr::Value(Value::Num(55))),
+                //     constness: Const::Yes,
+                // },
+                // mut z = 42;
+                UntypedExpr::Let {
+                    id: Value::Identifier("z"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(42))),
+                    constness: Const::No,
+                },
+                // Return x + z to use the variables
+                UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                    op: InfixOpKind::Add,
+                    right: Box::new(UntypedExpr::Value(Value::Identifier("z"))),
+                },
+            ],
+        }),
+    }];
+
+    use crate::reks_type::resolve::NameResolver;
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let mut typed_ast = inferencer.convert_program(&test_program);
+
+    match inferencer.infer_program(&mut typed_ast) {
+        Ok(()) => {
+            println!("Type inference successful!");
+            for (i, expr) in typed_ast.iter().enumerate() {
+                match &expr.type_info {
+                    TypeInfo::Known(t) => println!("Expr {}: Known {:?}", i, t),
+                    TypeInfo::Inferred(t) => println!("Expr {}: Inferred {:?}", i, t),
+                    TypeInfo::Unknown => println!("Expr {}: Unknown", i),
+                }
+                // Print types of variables in the block for clarity
+                if let UntypedExpr::Fn { body, .. } = &expr.kind {
+                    if let UntypedExpr::Block { statements } = body.as_ref() {
+                        for (j, stmt) in statements.iter().enumerate() {
+                            if let UntypedExpr::Let {
+                                id: Value::Identifier(name),
+                                ..
+                            } = stmt
+                            {
+                                if let Some(decl_id) =
+                                    inferencer.resolution_map.get_declaration_id(name)
+                                {
+                                    if let Some(ty) = inferencer.env.get(&decl_id) {
+                                        println!("  Let {} ({}): {:?}", j, name, ty);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Err(errors) => {
+            println!("Type errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+        }
+    }
+}
+
+// Test for All Unknowns
+pub fn test_all_unknowns_inference() {
+    let test_program = vec![
+        UntypedExpr::Fn {
+            name: Value::Identifier("add"),
+            params: vec![
+                Param {
+                    name: Value::Identifier("a"),
+                    ty: Value::Identifier("i32"),
+                }, // No type annotation
+                Param {
+                    name: Value::Identifier("b"),
+                    ty: Value::Identifier("i32"),
+                },
+            ],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))), // No return type annotation
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("a"))),
+                    op: InfixOpKind::Add,
+                    right: Box::new(UntypedExpr::Value(Value::Identifier("b"))),
+                }],
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))), // No return type annotation
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("x"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(5))),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("y"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Call {
+                            name: Box::new(UntypedExpr::Value(Value::Identifier("add"))),
+                            args: vec![
+                                UntypedExpr::Value(Value::Identifier("x")),
+                                UntypedExpr::Value(Value::Num(42)),
+                            ],
+                        }),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::Value(Value::Identifier("y")), // Return y
+                ],
+            }),
+        },
+    ];
+
+    use crate::reks_type::resolve::NameResolver;
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let mut typed_ast = inferencer.convert_program(&test_program);
+
+    match inferencer.infer_program(&mut typed_ast) {
+        Ok(()) => {
+            println!("Type inference successful!");
+            for (i, expr) in typed_ast.iter().enumerate() {
+                match &expr.type_info {
+                    TypeInfo::Known(t) => println!("Expr {}: Known {:?}", i, t),
+                    TypeInfo::Inferred(t) => println!("Expr {}: Inferred {:?}", i, t),
+                    TypeInfo::Unknown => println!("Expr {}: Unknown", i),
+                }
+                if let UntypedExpr::Fn { body, .. } = &expr.kind {
+                    if let UntypedExpr::Block { statements } = body.as_ref() {
+                        for (j, stmt) in statements.iter().enumerate() {
+                            if let UntypedExpr::Let {
+                                id: Value::Identifier(name),
+                                ..
+                            } = stmt
+                            {
+                                if let Some(decl_id) =
+                                    inferencer.resolution_map.get_declaration_id(name)
+                                {
+                                    if let Some(ty) = inferencer.env.get(&decl_id) {
+                                        println!("  Let {} ({}): {:?}", j, name, ty);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Err(errors) => {
+            println!("Type errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+        }
+    }
+}
+
+// Test for Function Calls with Mandatory Annotations
+pub fn test_function_call_inference() {
+    let test_program = vec![
+        UntypedExpr::Fn {
+            name: Value::Identifier("add"),
+            params: vec![
+                Param {
+                    name: Value::Identifier("a"),
+                    ty: Value::Identifier("i32"),
+                },
+                Param {
+                    name: Value::Identifier("b"),
+                    ty: Value::Identifier("i32"),
+                },
+            ],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("a"))),
+                    op: InfixOpKind::Add,
+                    right: Box::new(UntypedExpr::Value(Value::Identifier("b"))),
+                }],
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("x"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(5))),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("y"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Call {
+                            name: Box::new(UntypedExpr::Value(Value::Identifier("add"))),
+                            args: vec![
+                                UntypedExpr::Value(Value::Identifier("x")),
+                                UntypedExpr::Value(Value::Num(42)),
+                            ],
+                        }),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("z"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Call {
+                            name: Box::new(UntypedExpr::Value(Value::Identifier("add"))),
+                            args: vec![
+                                UntypedExpr::Value(Value::Identifier("y")),
+                                UntypedExpr::Value(Value::Identifier("x")),
+                            ],
+                        }),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::Value(Value::Identifier("z")), // Return z
+                ],
+            }),
+        },
+    ];
+
+    use crate::reks_type::resolve::NameResolver;
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let mut typed_ast = inferencer.convert_program(&test_program);
+
+    match inferencer.infer_program(&mut typed_ast) {
+        Ok(()) => {
+            println!("Type inference successful!");
+            for (i, expr) in typed_ast.iter().enumerate() {
+                match &expr.type_info {
+                    TypeInfo::Known(t) => println!("Expr {}: Known {:?}", i, t),
+                    TypeInfo::Inferred(t) => println!("Expr {}: Inferred {:?}", i, t),
+                    TypeInfo::Unknown => println!("Expr {}: Unknown", i),
+                }
+                if let UntypedExpr::Fn { body, .. } = &expr.kind {
+                    if let UntypedExpr::Block { statements } = body.as_ref() {
+                        for (j, stmt) in statements.iter().enumerate() {
+                            if let UntypedExpr::Let {
+                                id: Value::Identifier(name),
+                                ..
+                            } = stmt
+                            {
+                                if let Some(decl_id) =
+                                    inferencer.resolution_map.get_declaration_id(name)
+                                {
+                                    if let Some(ty) = inferencer.env.get(&decl_id) {
+                                        println!("  Let {} ({}): {:?}", j, name, ty);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
