@@ -288,5 +288,11 @@ fn main() {
     //test_type_inference(); passed
     //test_unannotated_let_inference(); passed
     //test_all_unknowns_inference(); passed
-    test_function_call_inference();
+    //test_function_call_inference(); passed
+    //test_generic_struct_inference(); passed
+    //test_list_inference();
+    //test_if_statement_inference();
+    //test_field_access_inference();
+    //test_nested_struct_field_access();
+    test_unannotated_let_with_field_access();
 }
