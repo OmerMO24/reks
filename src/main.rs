@@ -8,6 +8,7 @@ use reks_parse::parser::*;
 use reks_parse::utnode::*;
 use reks_type::infer::*;
 use reks_type::resolve::*;
+use reks_type::test_inference::*;
 use std::error::Error;
 
 // fn main() -> Result<(), Box<dyn Error>> {
@@ -294,5 +295,6 @@ fn main() {
     //test_if_statement_inference();
     //test_field_access_inference();
     //test_nested_struct_field_access();
-    test_unannotated_let_with_field_access();
+    //test_unannotated_let_with_field_access();
+    test_monolithic_program();
 }
