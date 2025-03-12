@@ -299,5 +299,6 @@ fn main() {
     // test_monolithic_program();
     // test_simple_program();
     // test_complex_realistic_program();
-    test_immutable_assignment_error();
+    // test_immutable_assignment_error();
+    test_final_fuzz_program();
 }

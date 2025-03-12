@@ -402,3 +402,275 @@ pub fn test_immutable_assignment_error() {
 
     test_harness(&test_program);
 }
+
+pub fn test_final_fuzz_program() {
+    let test_program = vec![
+        // struct Vector { dx: i32, dy: i32 }
+        UntypedExpr::Struct {
+            id: Value::Identifier("Vector"),
+            fields: vec![
+                Param {
+                    name: Value::Identifier("dx"),
+                    ty: Value::Identifier("i32"),
+                },
+                Param {
+                    name: Value::Identifier("dy"),
+                    ty: Value::Identifier("i32"),
+                },
+            ],
+        },
+        // struct Point { x: i32, v: Vector }
+        UntypedExpr::Struct {
+            id: Value::Identifier("Point"),
+            fields: vec![
+                Param {
+                    name: Value::Identifier("x"),
+                    ty: Value::Identifier("i32"),
+                },
+                Param {
+                    name: Value::Identifier("v"),
+                    ty: Value::Identifier("Vector"),
+                },
+            ],
+        },
+        // struct Path { start: Point, end: Point }
+        UntypedExpr::Struct {
+            id: Value::Identifier("Path"),
+            fields: vec![
+                Param {
+                    name: Value::Identifier("start"),
+                    ty: Value::Identifier("Point"),
+                },
+                Param {
+                    name: Value::Identifier("end"),
+                    ty: Value::Identifier("Point"),
+                },
+            ],
+        },
+        // fn add(a: i32, b: i32) -> i32 { a + b }
+        UntypedExpr::Fn {
+            name: Value::Identifier("add"),
+            params: vec![
+                Param {
+                    name: Value::Identifier("a"),
+                    ty: Value::Identifier("i32"),
+                },
+                Param {
+                    name: Value::Identifier("b"),
+                    ty: Value::Identifier("i32"),
+                },
+            ],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("a"))),
+                    op: InfixOpKind::Add,
+                    right: Box::new(UntypedExpr::Value(Value::Identifier("b"))),
+                }],
+            }),
+        },
+        // fn distance(p: Path) -> i32 { add(p.start.x, p.end.x) }
+        UntypedExpr::Fn {
+            name: Value::Identifier("distance"),
+            params: vec![Param {
+                name: Value::Identifier("p"),
+                ty: Value::Identifier("Path"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![UntypedExpr::Call {
+                    name: Box::new(UntypedExpr::Value(Value::Identifier("add"))),
+                    args: vec![
+                        UntypedExpr::FieldAccess {
+                            id: Box::new(UntypedExpr::FieldAccess {
+                                id: Box::new(UntypedExpr::Value(Value::Identifier("p"))),
+                                field: Value::Identifier("start"),
+                            }),
+                            field: Value::Identifier("x"),
+                        },
+                        UntypedExpr::FieldAccess {
+                            id: Box::new(UntypedExpr::FieldAccess {
+                                id: Box::new(UntypedExpr::Value(Value::Identifier("p"))),
+                                field: Value::Identifier("end"),
+                            }),
+                            field: Value::Identifier("x"),
+                        },
+                    ],
+                }],
+            }),
+        },
+        // fn main(p: Path) -> i32 { ... }
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![Param {
+                name: Value::Identifier("p"),
+                ty: Value::Identifier("Path"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    // mut steps: i32 = 0
+                    UntypedExpr::Let {
+                        id: Value::Identifier("steps"),
+                        pat: TypePath::Typed {
+                            ident: Value::Identifier("i32"),
+                        },
+                        expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        constness: Const::No,
+                    },
+                    // const distances = [p.start.v.dx, add(p.end.v.dy, steps)]
+                    UntypedExpr::Let {
+                        id: Value::Identifier("distances"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::List {
+                            items: vec![
+                                UntypedExpr::FieldAccess {
+                                    id: Box::new(UntypedExpr::FieldAccess {
+                                        id: Box::new(UntypedExpr::FieldAccess {
+                                            id: Box::new(UntypedExpr::Value(Value::Identifier(
+                                                "p",
+                                            ))),
+                                            field: Value::Identifier("start"),
+                                        }),
+                                        field: Value::Identifier("v"),
+                                    }),
+                                    field: Value::Identifier("dx"),
+                                },
+                                UntypedExpr::Call {
+                                    name: Box::new(UntypedExpr::Value(Value::Identifier("add"))),
+                                    args: vec![
+                                        UntypedExpr::FieldAccess {
+                                            id: Box::new(UntypedExpr::FieldAccess {
+                                                id: Box::new(UntypedExpr::FieldAccess {
+                                                    id: Box::new(UntypedExpr::Value(
+                                                        Value::Identifier("p"),
+                                                    )),
+                                                    field: Value::Identifier("end"),
+                                                }),
+                                                field: Value::Identifier("v"),
+                                            }),
+                                            field: Value::Identifier("dy"),
+                                        },
+                                        UntypedExpr::Value(Value::Identifier("steps")),
+                                    ],
+                                },
+                            ],
+                        }),
+                        constness: Const::Yes,
+                    },
+                    // if add(p.start.x, p.end.v.dx) > 0 { steps = distance(p); if p.start.v.dy != 0 { steps = add(steps, 1) } }
+                    UntypedExpr::If {
+                        condition: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Call {
+                                name: Box::new(UntypedExpr::Value(Value::Identifier("add"))),
+                                args: vec![
+                                    UntypedExpr::FieldAccess {
+                                        id: Box::new(UntypedExpr::FieldAccess {
+                                            id: Box::new(UntypedExpr::Value(Value::Identifier(
+                                                "p",
+                                            ))),
+                                            field: Value::Identifier("start"),
+                                        }),
+                                        field: Value::Identifier("x"),
+                                    },
+                                    UntypedExpr::FieldAccess {
+                                        id: Box::new(UntypedExpr::FieldAccess {
+                                            id: Box::new(UntypedExpr::FieldAccess {
+                                                id: Box::new(UntypedExpr::Value(
+                                                    Value::Identifier("p"),
+                                                )),
+                                                field: Value::Identifier("end"),
+                                            }),
+                                            field: Value::Identifier("v"),
+                                        }),
+                                        field: Value::Identifier("dx"),
+                                    },
+                                ],
+                            }),
+                            op: InfixOpKind::Greater,
+                            right: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        }),
+                        then_branch: Box::new(UntypedExpr::Block {
+                            statements: vec![
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("steps"))),
+                                    right: Box::new(UntypedExpr::Call {
+                                        name: Box::new(UntypedExpr::Value(Value::Identifier(
+                                            "distance",
+                                        ))),
+                                        args: vec![UntypedExpr::Value(Value::Identifier("p"))],
+                                    }),
+                                },
+                                UntypedExpr::If {
+                                    condition: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::FieldAccess {
+                                            id: Box::new(UntypedExpr::FieldAccess {
+                                                id: Box::new(UntypedExpr::FieldAccess {
+                                                    id: Box::new(UntypedExpr::Value(
+                                                        Value::Identifier("p"),
+                                                    )),
+                                                    field: Value::Identifier("start"),
+                                                }),
+                                                field: Value::Identifier("v"),
+                                            }),
+                                            field: Value::Identifier("dy"),
+                                        }),
+                                        op: InfixOpKind::NotEq,
+                                        right: Box::new(UntypedExpr::Value(Value::Num(0))),
+                                    }),
+                                    then_branch: Box::new(UntypedExpr::Block {
+                                        statements: vec![UntypedExpr::Assign {
+                                            left: Box::new(UntypedExpr::Value(Value::Identifier(
+                                                "steps",
+                                            ))),
+                                            right: Box::new(UntypedExpr::Call {
+                                                name: Box::new(UntypedExpr::Value(
+                                                    Value::Identifier("add"),
+                                                )),
+                                                args: vec![
+                                                    UntypedExpr::Value(Value::Identifier("steps")),
+                                                    UntypedExpr::Value(Value::Num(1)),
+                                                ],
+                                            }),
+                                        }],
+                                    }),
+                                    else_branch: Box::new(UntypedExpr::Block {
+                                        statements: vec![],
+                                    }),
+                                },
+                            ],
+                        }),
+                        else_branch: Box::new(UntypedExpr::Block { statements: vec![] }),
+                    },
+                    // const total = add(distance(p), steps)
+                    UntypedExpr::Let {
+                        id: Value::Identifier("total"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Call {
+                            name: Box::new(UntypedExpr::Value(Value::Identifier("add"))),
+                            args: vec![
+                                UntypedExpr::Call {
+                                    name: Box::new(UntypedExpr::Value(Value::Identifier(
+                                        "distance",
+                                    ))),
+                                    args: vec![UntypedExpr::Value(Value::Identifier("p"))],
+                                },
+                                UntypedExpr::Value(Value::Identifier("steps")),
+                            ],
+                        }),
+                        constness: Const::Yes,
+                    },
+                    // total = 5 -- Should trigger ImmutableAssignment error
+                    UntypedExpr::Assign {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("total"))),
+                        right: Box::new(UntypedExpr::Value(Value::Num(5))),
+                    },
+                    // return total
+                    UntypedExpr::Value(Value::Identifier("total")),
+                ],
+            }),
+        },
+    ];
+
+    test_harness(&test_program);
+}
