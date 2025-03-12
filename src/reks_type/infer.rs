@@ -5,12 +5,63 @@ use crate::reks_parse::operators::InfixOpKind; // Adjust path as needed
 use crate::reks_parse::utnode::{Const, Param, TypePath, UntypedExpr, Value}; // Adjust path
 use crate::reks_type::resolve::{NameResolutionMap, NodeId}; // Adjust path
 
-// Typed AST Node
+// In src/reks_type/infer.rs (or wherever TypedExpr is defined)
+
+// Remove the old TypedExpr definition and replace with:
 #[derive(Debug, Clone)]
 pub struct TypedExpr<'src> {
-    pub kind: UntypedExpr<'src>,
+    pub kind: TypedExprKind<'src>,
     pub type_info: TypeInfo,
     pub node_id: NodeId,
+}
+
+#[derive(Debug, Clone)]
+pub enum TypedExprKind<'src> {
+    Value(Value<'src>),
+    Let {
+        id: Value<'src>,
+        pat: TypePath<'src>,
+        expr: Box<TypedExpr<'src>>,
+        constness: Const,
+    },
+    Fn {
+        name: Value<'src>,
+        params: Vec<Param<'src>>,
+        retty: Box<TypedExpr<'src>>,
+        body: Box<TypedExpr<'src>>,
+    },
+    Call {
+        name: Box<TypedExpr<'src>>,
+        args: Vec<TypedExpr<'src>>,
+    },
+    BinOp {
+        left: Box<TypedExpr<'src>>,
+        op: InfixOpKind,
+        right: Box<TypedExpr<'src>>,
+    },
+    Block {
+        statements: Vec<TypedExpr<'src>>,
+    },
+    Struct {
+        id: Value<'src>,
+        fields: Vec<Param<'src>>,
+    },
+    List {
+        elements: Vec<TypedExpr<'src>>,
+    },
+    If {
+        condition: Box<TypedExpr<'src>>,
+        then_branch: Box<TypedExpr<'src>>,
+        else_branch: Box<TypedExpr<'src>>,
+    },
+    FieldAccess {
+        expr: Box<TypedExpr<'src>>,
+        field: Value<'src>,
+    },
+    Assign {
+        target: Box<TypedExpr<'src>>,
+        expr: Box<TypedExpr<'src>>,
+    },
 }
 
 // Type Information
@@ -19,6 +70,15 @@ pub enum TypeInfo {
     Known(Type),
     Unknown,
     Inferred(Type),
+}
+
+impl TypeInfo {
+    fn into_type(self) -> Option<Type> {
+        match self {
+            TypeInfo::Known(t) | TypeInfo::Inferred(t) => Some(t),
+            TypeInfo::Unknown => None,
+        }
+    }
 }
 
 // Core Type Representation
@@ -43,6 +103,7 @@ pub enum TypeError {
     UnknownVariable(String),
     NotAFunction(Type),
     InvalidTypeAnnotation(String),
+    ImmutableAssignment(String),
 }
 
 // Type Environment and Substitution
@@ -129,9 +190,10 @@ pub struct TypeInferencer {
     pub resolution_map: NameResolutionMap,
     pub struct_names: HashSet<String>,
     pub struct_fields: HashMap<String, Vec<(String, Type)>>,
+    mutability: HashMap<NodeId, bool>, // New: Tracks if variables are mutable (true) or const (false)
 }
 
-impl TypeInferencer {
+impl<'src> TypeInferencer {
     pub fn new(resolution_map: NameResolutionMap) -> Self {
         Self {
             env: HashMap::new(),
@@ -140,6 +202,7 @@ impl TypeInferencer {
             resolution_map,
             struct_names: HashSet::new(),
             struct_fields: HashMap::new(),
+            mutability: HashMap::new(),
         }
     }
 
@@ -149,49 +212,135 @@ impl TypeInferencer {
         Type::TypeVar(id)
     }
 
-    pub fn convert_to_typed_ast<'src>(&mut self, expr: &UntypedExpr<'src>) -> TypedExpr<'src> {
+    pub fn convert_to_typed_ast(&mut self, expr: &UntypedExpr<'src>) -> TypedExpr<'src> {
         let node_id = self.resolution_map.get_id();
         let type_info = match expr {
             UntypedExpr::Value(Value::Num(_)) => TypeInfo::Known(Type::Int),
             UntypedExpr::Value(Value::Float(_)) => TypeInfo::Known(Type::Float),
             UntypedExpr::Value(Value::String(_)) => TypeInfo::Known(Type::String),
+            UntypedExpr::Value(Value::Identifier(name)) => {
+                // Handle type annotations like "i32" in retty or params
+                match *name {
+                    "i32" | "i64" | "i8" => TypeInfo::Known(Type::Int),
+                    "f64" => TypeInfo::Known(Type::Float),
+                    "bool" => TypeInfo::Known(Type::Bool),
+                    "string" => TypeInfo::Known(Type::String),
+                    _ => TypeInfo::Unknown, // Variables or structs to be resolved later
+                }
+            }
             _ => TypeInfo::Unknown,
         };
+
+        let kind = match expr {
+            UntypedExpr::Value(val) => TypedExprKind::Value(val.clone()),
+            UntypedExpr::Let {
+                id,
+                pat,
+                expr: init_expr,
+                constness,
+            } => TypedExprKind::Let {
+                id: id.clone(),
+                pat: pat.clone(),
+                expr: Box::new(self.convert_to_typed_ast(init_expr)),
+                constness: *constness,
+            },
+            UntypedExpr::Fn {
+                name,
+                params,
+                retty,
+                body,
+            } => TypedExprKind::Fn {
+                name: name.clone(),
+                params: params.clone(),
+                retty: Box::new(self.convert_to_typed_ast(retty)),
+                body: Box::new(self.convert_to_typed_ast(body)),
+            },
+            UntypedExpr::Call { name, args } => TypedExprKind::Call {
+                name: Box::new(self.convert_to_typed_ast(name)),
+                args: args
+                    .iter()
+                    .map(|arg| self.convert_to_typed_ast(arg))
+                    .collect(),
+            },
+            UntypedExpr::BinOp { left, op, right } => TypedExprKind::BinOp {
+                left: Box::new(self.convert_to_typed_ast(left)),
+                op: *op,
+                right: Box::new(self.convert_to_typed_ast(right)),
+            },
+            UntypedExpr::Block { statements } => TypedExprKind::Block {
+                statements: statements
+                    .iter()
+                    .map(|stmt| self.convert_to_typed_ast(stmt))
+                    .collect(),
+            },
+            UntypedExpr::Struct { id, fields } => TypedExprKind::Struct {
+                id: id.clone(),
+                fields: fields.clone(),
+            },
+            UntypedExpr::List { items } => TypedExprKind::List {
+                elements: items
+                    .iter()
+                    .map(|elem| self.convert_to_typed_ast(elem))
+                    .collect(),
+            },
+            UntypedExpr::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => TypedExprKind::If {
+                condition: Box::new(self.convert_to_typed_ast(condition)),
+                then_branch: Box::new(self.convert_to_typed_ast(then_branch)),
+                else_branch: Box::new(self.convert_to_typed_ast(else_branch)),
+            },
+            UntypedExpr::FieldAccess { id, field } => TypedExprKind::FieldAccess {
+                expr: Box::new(self.convert_to_typed_ast(id)),
+                field: field.clone(),
+            },
+            UntypedExpr::Assign { left, right } => TypedExprKind::Assign {
+                target: Box::new(self.convert_to_typed_ast(left)),
+                expr: Box::new(self.convert_to_typed_ast(right)),
+            },
+            _ => todo!(),
+        };
+
         TypedExpr {
-            kind: expr.clone(),
+            kind,
             type_info,
             node_id,
         }
     }
 
-    fn infer_expr(&mut self, expr: &mut TypedExpr) -> Result<Type, TypeError> {
+    fn infer_expr(&mut self, expr: TypedExpr<'src>) -> Result<TypedExpr<'src>, TypeError> {
         if let TypeInfo::Known(t) | TypeInfo::Inferred(t) = &expr.type_info {
-            return Ok(t.clone());
+            return Ok(expr); // Already typed, no need to re-infer
         }
 
-        let inferred_type = match &mut expr.kind {
-            UntypedExpr::Value(Value::Num(_)) => Type::Int,
-            UntypedExpr::Value(Value::Float(_)) => Type::Float,
-            UntypedExpr::Value(Value::String(_)) => Type::String,
-            UntypedExpr::Value(Value::Identifier(name)) => {
-                if let Some(decl_id) = self.resolution_map.resolve_name(name) {
-                    self.env
-                        .get(&decl_id)
-                        .cloned()
-                        .ok_or_else(|| TypeError::UnknownVariable(name.to_string()))?
-                } else {
-                    return Err(TypeError::UnknownVariable(name.to_string()));
+        let (inferred_type, new_kind) = match expr.kind {
+            TypedExprKind::Value(val) => match val {
+                Value::Num(_) => (Type::Int, TypedExprKind::Value(val)),
+                Value::Float(_) => (Type::Float, TypedExprKind::Value(val)),
+                Value::String(_) => (Type::String, TypedExprKind::Value(val)),
+                Value::Identifier(name) => {
+                    if let Some(decl_id) = self.resolution_map.resolve_name(name) {
+                        let ty = self
+                            .env
+                            .get(&decl_id)
+                            .cloned()
+                            .ok_or_else(|| TypeError::UnknownVariable(name.to_string()))?;
+                        (ty, TypedExprKind::Value(val))
+                    } else {
+                        return Err(TypeError::UnknownVariable(name.to_string()));
+                    }
                 }
-            }
-            UntypedExpr::Let {
+            },
+            TypedExprKind::Let {
                 id: Value::Identifier(name),
                 pat,
                 expr: init_expr,
-                ..
+                constness,
             } => {
-                let mut init_typed = self.convert_to_typed_ast(init_expr);
-                let init_type = self.infer_expr(&mut init_typed)?;
-                *init_expr = Box::new(init_typed.kind);
+                let init_typed = self.infer_expr(*init_expr)?;
+                let init_type = init_typed.type_info.clone().into_type().unwrap();
 
                 let var_type = match pat {
                     TypePath::Typed {
@@ -201,81 +350,39 @@ impl TypeInferencer {
                         self.subst = unify(&init_type, &ann_type, &self.subst)?;
                         ann_type
                     }
-                    _ => init_type,
+                    TypePath::Typed { ident: _ } => {
+                        return Err(TypeError::InvalidTypeAnnotation(
+                            "Type annotation must be an identifier".to_string(),
+                        ));
+                    }
+                    TypePath::Empty => init_type,
                 };
 
                 if let Some(decl_id) = self.resolution_map.get_declaration_id(name) {
                     self.env.insert(decl_id, var_type.clone());
+                    self.mutability.insert(decl_id, constness == Const::No);
                 }
-                Type::Unit
+                (
+                    Type::Unit,
+                    TypedExprKind::Let {
+                        id: Value::Identifier(name),
+                        pat,
+                        expr: Box::new(init_typed),
+                        constness,
+                    },
+                )
             }
-            UntypedExpr::BinOp { left, op, right } => {
-                let mut left_typed = self.convert_to_typed_ast(left);
-                let mut right_typed = self.convert_to_typed_ast(right);
-                let t_left = self.infer_expr(&mut left_typed)?;
-                let t_right = self.infer_expr(&mut right_typed)?;
-                *left = Box::new(left_typed.kind);
-                *right = Box::new(right_typed.kind);
-
-                match op {
-                    InfixOpKind::Add | InfixOpKind::Sub | InfixOpKind::Mul | InfixOpKind::Div => {
-                        self.subst = unify(&t_left, &t_right, &self.subst)?;
-                        self.subst = unify(&t_left, &Type::Int, &self.subst)?; // Assuming Int for simplicity
-                        Type::Int
-                    }
-                    InfixOpKind::Equals | InfixOpKind::NotEq => {
-                        self.subst = unify(&t_left, &t_right, &self.subst)?;
-                        Type::Bool
-                    }
-                    _ => unimplemented!("Operator {:?}", op),
-                }
-            }
-            UntypedExpr::Call { name, args } => {
-                let mut name_typed = self.convert_to_typed_ast(name);
-                let func_type = self.infer_expr(&mut name_typed)?;
-                *name = Box::new(name_typed.kind);
-
-                let mut arg_types = Vec::new();
-                for arg in args.iter_mut() {
-                    let mut arg_typed = self.convert_to_typed_ast(arg);
-                    arg_types.push(self.infer_expr(&mut arg_typed)?);
-                    *arg = arg_typed.kind;
-                }
-
-                let ret_type = self.fresh_type_var();
-                let expected_type = Type::Function(arg_types, Box::new(ret_type.clone()));
-                self.subst = unify(&func_type, &expected_type, &self.subst)?;
-                ret_type.apply_subst(&self.subst)
-            }
-            UntypedExpr::Block { statements } => {
-                let mut block_type = Type::Unit;
-                for stmt in statements.iter_mut() {
-                    let mut stmt_typed = self.convert_to_typed_ast(stmt);
-                    block_type = self.infer_expr(&mut stmt_typed)?;
-                    *stmt = stmt_typed.kind;
-                }
-                block_type
-            }
-            UntypedExpr::Fn {
+            TypedExprKind::Fn {
                 name,
                 params,
                 retty,
                 body,
             } => {
-                // Treat retty as a type annotation, not an expression to infer
-                let ret_type = match retty.as_ref() {
-                    UntypedExpr::Value(Value::Identifier(ty_name)) => {
-                        self.type_from_annotation(ty_name)?
-                    }
-                    _ => {
-                        return Err(TypeError::InvalidTypeAnnotation(
-                            "Invalid return type".to_string(),
-                        ))
-                    }
-                };
+                let ret_typed = self.infer_expr(*retty)?;
+                let ret_type = ret_typed.type_info.clone().into_type().unwrap();
 
                 let mut param_types = Vec::new();
-                for param in params {
+                for param in &params {
                     if let (Value::Identifier(p_name), Value::Identifier(ty_name)) =
                         (&param.name, &param.ty)
                     {
@@ -287,9 +394,8 @@ impl TypeInferencer {
                     }
                 }
 
-                let mut body_typed = self.convert_to_typed_ast(body);
-                let body_type = self.infer_expr(&mut body_typed)?;
-                *body = Box::new(body_typed.kind);
+                let body_typed = self.infer_expr(*body)?;
+                let body_type = body_typed.type_info.clone().into_type().unwrap();
 
                 self.subst = unify(&body_type, &ret_type, &self.subst)?;
                 let fn_type = Type::Function(param_types, Box::new(ret_type));
@@ -299,14 +405,90 @@ impl TypeInferencer {
                         self.env.insert(decl_id, fn_type.clone());
                     }
                 }
-                fn_type
+                (
+                    fn_type,
+                    TypedExprKind::Fn {
+                        name,
+                        params,
+                        retty: Box::new(ret_typed),
+                        body: Box::new(body_typed),
+                    },
+                )
             }
-            UntypedExpr::Struct {
+            TypedExprKind::Call { name, args } => {
+                let name_typed = self.infer_expr(*name)?;
+                let func_type = name_typed.type_info.clone().into_type().unwrap();
+
+                let mut arg_types = Vec::new();
+                let mut typed_args = Vec::new();
+                for arg in args {
+                    let arg_typed = self.infer_expr(arg)?;
+                    arg_types.push(arg_typed.type_info.clone().into_type().unwrap());
+                    typed_args.push(arg_typed);
+                }
+
+                let ret_type = self.fresh_type_var();
+                let expected_type = Type::Function(arg_types, Box::new(ret_type.clone()));
+                self.subst = unify(&func_type, &expected_type, &self.subst)?;
+                (
+                    ret_type.apply_subst(&self.subst),
+                    TypedExprKind::Call {
+                        name: Box::new(name_typed),
+                        args: typed_args,
+                    },
+                )
+            }
+            TypedExprKind::BinOp { left, op, right } => {
+                let left_typed = self.infer_expr(*left)?;
+                let right_typed = self.infer_expr(*right)?;
+                let t_left = left_typed.type_info.clone().into_type().unwrap();
+                let t_right = right_typed.type_info.clone().into_type().unwrap();
+
+                let ty = match op {
+                    InfixOpKind::Add | InfixOpKind::Sub | InfixOpKind::Mul | InfixOpKind::Div => {
+                        self.subst = unify(&t_left, &t_right, &self.subst)?;
+                        self.subst = unify(&t_left, &Type::Int, &self.subst)?;
+                        Type::Int
+                    }
+                    InfixOpKind::Equals
+                    | InfixOpKind::NotEq
+                    | InfixOpKind::Greater
+                    | InfixOpKind::Less => {
+                        self.subst = unify(&t_left, &t_right, &self.subst)?;
+                        Type::Bool
+                    }
+                    _ => Type::Unit,
+                };
+                (
+                    ty,
+                    TypedExprKind::BinOp {
+                        left: Box::new(left_typed),
+                        op,
+                        right: Box::new(right_typed),
+                    },
+                )
+            }
+            TypedExprKind::Block { statements } => {
+                let mut block_type = Type::Unit;
+                let mut typed_statements = Vec::new();
+                for stmt in statements {
+                    let stmt_typed = self.infer_expr(stmt)?;
+                    block_type = stmt_typed.type_info.clone().into_type().unwrap();
+                    typed_statements.push(stmt_typed);
+                }
+                (
+                    block_type,
+                    TypedExprKind::Block {
+                        statements: typed_statements,
+                    },
+                )
+            }
+            TypedExprKind::Struct {
                 id: Value::Identifier(name),
                 fields,
             } => {
                 let mut field_types = Vec::new();
-                for param in fields {
+                for param in &fields {
                     if let (Value::Identifier(f_name), Value::Identifier(ty_name)) =
                         (&param.name, &param.ty)
                     {
@@ -316,54 +498,29 @@ impl TypeInferencer {
                 }
                 self.struct_names.insert(name.to_string());
                 self.struct_fields
-                    .insert(name.to_string(), field_types.clone()); // Store fields
+                    .insert(name.to_string(), field_types.clone());
                 let struct_type = Type::Struct(name.to_string(), field_types);
                 if let Some(decl_id) = self.resolution_map.get_declaration_id(name) {
                     self.env.insert(decl_id, struct_type.clone());
                 }
-                Type::Unit
+                (
+                    Type::Unit,
+                    TypedExprKind::Struct {
+                        id: Value::Identifier(name),
+                        fields,
+                    },
+                )
             }
-            UntypedExpr::FieldAccess { id, field } => {
-                let mut expr_typed = self.convert_to_typed_ast(id);
-                let expr_type = self.infer_expr(&mut expr_typed)?;
-                *id = Box::new(expr_typed.kind);
-
-                match field {
-                    Value::Identifier(field_name) => {
-                        match expr_type {
-                            Type::Struct(struct_name, fields) => {
-                                for (f_name, f_type) in &fields {
-                                    if f_name == *field_name {
-                                        return Ok(f_type.clone());
-                                    }
-                                }
-                                Err(TypeError::InvalidTypeAnnotation(format!(
-                                    "Field {} not found in struct {}",
-                                    field_name, struct_name
-                                )))
-                            }
-                            _ => Err(TypeError::UnificationFail(
-                                expr_type,
-                                Type::Struct("unknown".to_string(), vec![]), // Dummy struct type for error
-                            )),
-                        }
-                    }
-                    _ => Err(TypeError::InvalidTypeAnnotation(
-                        "Field must be an identifier".to_string(),
-                    )),
-                }?
-            }
-            UntypedExpr::List { items } => {
-                if items.is_empty() {
-                    // Empty list: polymorphic type List(a)
+            TypedExprKind::List { elements } => {
+                let mut typed_elements = Vec::new();
+                let ty = if elements.is_empty() {
                     Type::List(Box::new(self.fresh_type_var()))
                 } else {
-                    // Non-empty list: unify all elements to the same type
                     let mut elem_type = None;
-                    for elem in items.iter_mut() {
-                        let mut elem_typed = self.convert_to_typed_ast(elem);
-                        let t = self.infer_expr(&mut elem_typed)?;
-                        *elem = elem_typed.kind;
+                    for elem in elements {
+                        let elem_typed = self.infer_expr(elem)?;
+                        let t = elem_typed.type_info.clone().into_type().unwrap();
+                        typed_elements.push(elem_typed);
                         match elem_type {
                             None => elem_type = Some(t),
                             Some(ref prev_t) => {
@@ -371,37 +528,118 @@ impl TypeInferencer {
                             }
                         }
                     }
-                    Type::List(Box::new(elem_type.unwrap())) // Safe since non-empty
-                }
+                    Type::List(Box::new(elem_type.unwrap()))
+                };
+                (
+                    ty,
+                    TypedExprKind::List {
+                        elements: typed_elements,
+                    },
+                )
             }
-            UntypedExpr::If {
+            TypedExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
             } => {
-                // Infer condition type and unify with Bool
-                let mut cond_typed = self.convert_to_typed_ast(condition);
-                let cond_type = self.infer_expr(&mut cond_typed)?;
-                *condition = Box::new(cond_typed.kind);
+                let cond_typed = self.infer_expr(*condition)?;
+                let cond_type = cond_typed.type_info.clone().into_type().unwrap();
                 self.subst = unify(&cond_type, &Type::Bool, &self.subst)?;
 
-                // Infer then and else branch types and unify them
-                let mut then_typed = self.convert_to_typed_ast(then_branch);
-                let then_type = self.infer_expr(&mut then_typed)?;
-                *then_branch = Box::new(then_typed.kind);
+                let then_typed = self.infer_expr(*then_branch)?;
+                let then_type = then_typed.type_info.clone().into_type().unwrap();
 
-                let mut else_typed = self.convert_to_typed_ast(else_branch);
-                let else_type = self.infer_expr(&mut else_typed)?;
-                *else_branch = Box::new(else_typed.kind);
+                let else_typed = self.infer_expr(*else_branch)?;
+                let else_type = else_typed.type_info.clone().into_type().unwrap();
 
                 self.subst = unify(&then_type, &else_type, &self.subst)?;
-                then_type // Could use else_type too, since they're unified
+                (
+                    then_type,
+                    TypedExprKind::If {
+                        condition: Box::new(cond_typed),
+                        then_branch: Box::new(then_typed),
+                        else_branch: Box::new(else_typed),
+                    },
+                )
             }
-            _ => self.fresh_type_var(),
+            TypedExprKind::FieldAccess { expr, field } => {
+                let expr_typed = self.infer_expr(*expr)?;
+                let expr_type = expr_typed.type_info.clone().into_type().unwrap();
+
+                let ty = match field {
+                    Value::Identifier(field_name) => match expr_type {
+                        Type::Struct(_, fields) => {
+                            let mut found_type = None;
+                            for (f_name, f_type) in fields {
+                                if f_name == field_name {
+                                    found_type = Some(f_type.clone());
+                                    break;
+                                }
+                            }
+                            match found_type {
+                                Some(t) => Ok(t),
+                                None => Err(TypeError::InvalidTypeAnnotation(format!(
+                                    "Field {} not found in struct",
+                                    field_name
+                                ))),
+                            }
+                        }
+                        _ => Err(TypeError::UnificationFail(
+                            expr_type,
+                            Type::Struct("unknown".to_string(), vec![]),
+                        )),
+                    },
+                    _ => Err(TypeError::InvalidTypeAnnotation(
+                        "Field must be an identifier".to_string(),
+                    )),
+                }?;
+                (
+                    ty,
+                    TypedExprKind::FieldAccess {
+                        expr: Box::new(expr_typed),
+                        field,
+                    },
+                )
+            }
+            TypedExprKind::Assign { target, expr } => {
+                let target_typed = self.infer_expr(*target)?;
+                let target_type = target_typed.type_info.clone().into_type().unwrap();
+
+                if let TypedExprKind::Value(Value::Identifier(name)) = &target_typed.kind {
+                    if let Some(decl_id) = self.resolution_map.resolve_name(name) {
+                        let is_mutable = *self.mutability.get(&decl_id).unwrap_or(&false);
+                        if !is_mutable {
+                            return Err(TypeError::ImmutableAssignment(name.to_string()));
+                        }
+                    } else {
+                        return Err(TypeError::UnknownVariable(name.to_string()));
+                    }
+                } else {
+                    return Err(TypeError::InvalidTypeAnnotation(
+                        "Assignment target must be an identifier".to_string(),
+                    ));
+                }
+
+                let expr_typed = self.infer_expr(*expr)?;
+                let expr_type = expr_typed.type_info.clone().into_type().unwrap();
+
+                self.subst = unify(&target_type, &expr_type, &self.subst)?;
+                (
+                    Type::Unit,
+                    TypedExprKind::Assign {
+                        target: Box::new(target_typed),
+                        expr: Box::new(expr_typed),
+                    },
+                )
+            }
+            _ => todo!(),
         };
 
-        expr.type_info = TypeInfo::Inferred(inferred_type.clone());
-        Ok(inferred_type)
+        Ok(TypedExpr {
+            kind: new_kind,
+            type_info: TypeInfo::Inferred(inferred_type),
+            node_id: expr.node_id,
+        })
     }
 
     fn type_from_annotation(&self, type_name: &str) -> Result<Type, TypeError> {
@@ -418,21 +656,32 @@ impl TypeInferencer {
         }
     }
 
-    pub fn infer_program(&mut self, program: &mut [TypedExpr]) -> Result<(), Vec<TypeError>> {
+    pub fn infer_program(
+        &mut self,
+        program: &[UntypedExpr<'src>],
+    ) -> Result<Vec<TypedExpr<'src>>, Vec<TypeError>> {
+        let mut typed_ast = program
+            .iter()
+            .map(|expr| self.convert_to_typed_ast(expr))
+            .collect::<Vec<_>>();
+        let mut result_ast = Vec::new();
         let mut errors = Vec::new();
-        for expr in program.iter_mut() {
-            if let Err(e) = self.infer_expr(expr) {
-                errors.push(e);
+
+        for expr in typed_ast {
+            match self.infer_expr(expr) {
+                Ok(typed_expr) => result_ast.push(typed_expr),
+                Err(e) => errors.push(e),
             }
         }
+
         if errors.is_empty() {
-            Ok(())
+            Ok(result_ast)
         } else {
             Err(errors)
         }
     }
 
-    pub fn convert_program<'src>(&mut self, program: &[UntypedExpr<'src>]) -> Vec<TypedExpr<'src>> {
+    pub fn convert_program(&mut self, program: &[UntypedExpr<'src>]) -> Vec<TypedExpr<'src>> {
         program
             .iter()
             .map(|expr| self.convert_to_typed_ast(expr))

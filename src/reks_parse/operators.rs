@@ -1,7 +1,7 @@
 use crate::reks_parse::lexer::*;
 use crate::reks_parse::FromKind;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum InfixOpKind {
     Add,
     Sub,

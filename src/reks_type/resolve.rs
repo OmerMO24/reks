@@ -455,7 +455,7 @@ impl NameResolver {
     }
 
     // Modified to populate the resolution map
-    pub fn resolve_program(&mut self, program: &[UntypedExpr]) -> &NameResolutionMap {
+    pub fn resolve_program(&mut self, program: &Vec<UntypedExpr<'_>>) -> &NameResolutionMap {
         // First pass: register all top-level declarations
         for expr in program {
             match expr {

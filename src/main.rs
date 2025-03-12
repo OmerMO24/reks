@@ -296,5 +296,8 @@ fn main() {
     //test_field_access_inference();
     //test_nested_struct_field_access();
     //test_unannotated_let_with_field_access();
-    test_monolithic_program();
+    // test_monolithic_program();
+    // test_simple_program();
+    // test_complex_realistic_program();
+    test_immutable_assignment_error();
 }
