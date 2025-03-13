@@ -73,7 +73,14 @@ pub enum TypeInfo {
 }
 
 impl TypeInfo {
-    fn into_type(self) -> Option<Type> {
+    pub fn into_type(self) -> Option<Type> {
+        match self {
+            TypeInfo::Known(t) | TypeInfo::Inferred(t) => Some(t),
+            TypeInfo::Unknown => None,
+        }
+    }
+
+    pub fn as_type(&self) -> Option<&Type> {
         match self {
             TypeInfo::Known(t) | TypeInfo::Inferred(t) => Some(t),
             TypeInfo::Unknown => None,

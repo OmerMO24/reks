@@ -5,283 +5,324 @@ use crate::reks_type::{
 };
 use std::collections::HashMap;
 
-// In src/reks_type/infer.rs (or a new file like cir.rs)
-
-// CIR Value representation (compile-time values)
+// CIR Value for compile-time results
 #[derive(Debug, Clone)]
 pub enum CirValue {
-    Int(i64),
-    Float(f64),
-    Bool(bool),
-    Struct(HashMap<String, CirValue>),
-    List(Vec<CirValue>),
+    Int(i32),
+    // Add more as we expand (Bool, Struct, etc.)
 }
 
-// Identifier for values in CIR (variables, temporaries, constants)
+// CIR Type (mirrors Type from infer.rs)
 #[derive(Debug, Clone)]
-pub enum ValueId {
-    Var(NodeId),     // Variable reference by NodeId
-    Temp(String),    // Temporary result (e.g., "tmp0")
-    Const(CirValue), // Constant value
+pub enum CIRType {
+    Int,
+    Function(Vec<CIRType>, Box<CIRType>),
+    // Add more as needed
+}
+
+impl From<&Type> for CIRType {
+    fn from(ty: &Type) -> Self {
+        match ty {
+            Type::Int => CIRType::Int,
+            Type::Function(params, ret) => CIRType::Function(
+                params.iter().map(|t| t.into()).collect(),
+                Box::new(ret.as_ref().into()),
+            ),
+            _ => unimplemented!("Other types not yet supported"),
+        }
+    }
 }
 
 // CIR Operations
 #[derive(Debug, Clone)]
 pub enum CIROp {
-    Const(CirValue),                  // Literal value
-    Add(ValueId, ValueId),            // Arithmetic addition
-    Sub(ValueId, ValueId),            // Subtraction
-    Mul(ValueId, ValueId),            // Multiplication
-    Div(ValueId, ValueId),            // Division
-    Gt(ValueId, ValueId),             // Greater than
-    Lt(ValueId, ValueId),             // Less than
-    Eq(ValueId, ValueId),             // Equal
-    Neq(ValueId, ValueId),            // Not equal
-    Store(NodeId, ValueId),           // Assign to variable
-    Load(NodeId),                     // Load variable value
-    Struct(HashMap<String, ValueId>), // Create struct
-    GetField(ValueId, String),        // Access struct field
-    List(Vec<ValueId>),               // Create list
-    Call(NodeId, Vec<ValueId>),       // Function call
-    Branch(ValueId, String, String),  // Conditional jump (cond, then_label, else_label)
-    Jump(String),                     // Unconditional jump
-    Label(String),                    // Jump target
-    Return(ValueId),                  // Return value
+    Const(CIRType, CirValue),       // Literal value
+    Add(CIRType, ValueId, ValueId), // Addition
+    Call(usize, Vec<ValueId>),      // Call by block index
+    Return(ValueId),                // Return value
 }
+
+// SSA ValueId (temporary or parameter slot)
+#[derive(Debug, Clone)]
+pub struct ValueId(pub String);
 
 // CIR Instruction
 #[derive(Debug, Clone)]
 pub struct CIRInstruction {
     pub op: CIROp,
-    value: Option<CirValue>, // Filled by interpreter later
+    pub result: ValueId, // SSA temporary assigned to this instruction
 }
 
 impl CIRInstruction {
-    pub fn new(op: CIROp) -> Self {
-        CIRInstruction { op, value: None }
+    pub fn new(op: CIROp, result: ValueId) -> Self {
+        CIRInstruction { op, result }
     }
 }
 
-use crate::reks_type::resolve::NameResolutionMap;
-
-pub struct CIRBuilder {
-    instructions: Vec<CIRInstruction>,
-    temp_counter: usize,
-    label_counter: usize,
-    functions: HashMap<NodeId, Vec<CIRInstruction>>,
-    resolution_map: NameResolutionMap, // Add resolution map for name lookup
+// CIR Block (one per function)
+#[derive(Debug, Clone)]
+pub struct CIRBlock {
+    pub id: usize, // Block index (e.g., 0 for add, 1 for main)
+    pub instructions: Vec<CIRInstruction>,
 }
 
-impl CIRBuilder {
-    pub fn new(resolution_map: NameResolutionMap) -> Self {
-        CIRBuilder {
-            instructions: Vec::new(),
+// Full CIR program
+#[derive(Debug, Clone)]
+pub struct CIR {
+    pub blocks: Vec<CIRBlock>,
+}
+
+// pub struct SSACIRBuilder {
+//     blocks: Vec<CIRBlock>,
+//     temp_counter: usize,
+//     function_map: HashMap<String, usize>,
+//     pub param_map: HashMap<String, ValueId>,
+// }
+
+// impl SSACIRBuilder {
+//     pub fn new() -> Self {
+//         SSACIRBuilder {
+//             blocks: Vec::new(),
+//             temp_counter: 0,
+//             function_map: HashMap::new(),
+//             param_map: HashMap::new(),
+//         }
+//     }
+
+//     fn new_temp(&mut self) -> ValueId {
+//         let temp = format!("%{}", self.temp_counter);
+//         self.temp_counter += 1;
+//         ValueId(temp)
+//     }
+
+//     fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
+//         let result = self.new_temp();
+//         if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
+//             block
+//                 .instructions
+//                 .push(CIRInstruction::new(op, result.clone()));
+//         }
+//         result
+//     }
+
+//     fn lower_expr(&mut self, expr: &TypedExpr, block_id: usize) -> ValueId {
+//         println!("status: {:?}", self.param_map);
+//         match &expr.kind {
+//             TypedExprKind::Value(val) => match val {
+//                 Value::Num(n) => {
+//                     let ty = CIRType::from(expr.type_info.as_type().unwrap());
+//                     self.emit(
+//                         block_id,
+//                         CIROp::Const(ty, CirValue::Int((*n).try_into().unwrap())),
+//                     )
+//                 }
+//                 Value::Identifier(name) => {
+//                     println!("What are we trying to get: {:?}", name);
+//                     if let Some(param_id) = self.param_map.get(*name) {
+//                         param_id.clone() // Use parameter’s ValueId
+//                     } else {
+//                         panic!("Unresolved identifier: {}", name);
+//                     }
+//                 }
+//                 _ => unimplemented!("Other Value types not yet supported"),
+//             },
+//             TypedExprKind::Fn {
+//                 name,
+//                 params,
+//                 retty,
+//                 body,
+//             } => {
+//                 if let Value::Identifier(fn_name) = name {
+//                     let block_id = self.blocks.len();
+//                     self.function_map.insert(fn_name.to_string(), block_id);
+//                     self.blocks.push(CIRBlock {
+//                         id: block_id,
+//                         instructions: Vec::new(),
+//                     });
+//                     let body_id = self.lower_expr(body, block_id);
+//                     self.emit(block_id, CIROp::Return(body_id));
+//                     ValueId(format!("block{}", block_id))
+//                 } else {
+//                     panic!("Function name must be an identifier");
+//                 }
+//             }
+//             TypedExprKind::Call { name, args } => {
+//                 let mut arg_ids = Vec::new();
+//                 for arg in args {
+//                     arg_ids.push(self.lower_expr(arg, block_id));
+//                 }
+//                 if let TypedExprKind::Value(Value::Identifier(fn_name)) = &name.kind {
+//                     let fn_block_id = *self
+//                         .function_map
+//                         .get(fn_name.clone())
+//                         .expect("Function not found");
+//                     let ty = CIRType::from(expr.type_info.as_type().unwrap());
+//                     self.emit(block_id, CIROp::Call(fn_block_id, arg_ids))
+//                 } else {
+//                     panic!("Call target must be an identifier");
+//                 }
+//             }
+//             TypedExprKind::BinOp { left, op, right } => {
+//                 let left_id = self.lower_expr(left, block_id);
+//                 let right_id = self.lower_expr(right, block_id);
+//                 let ty = CIRType::from(expr.type_info.as_type().unwrap());
+//                 match op {
+//                     InfixOpKind::Add => self.emit(block_id, CIROp::Add(ty, left_id, right_id)),
+//                     _ => unimplemented!("Only addition supported in this subset"),
+//                 }
+//             }
+//             TypedExprKind::Block { statements } => {
+//                 let mut last_id = None;
+//                 for stmt in statements {
+//                     last_id = Some(self.lower_expr(stmt, block_id));
+//                 }
+//                 last_id.unwrap_or_else(|| {
+//                     panic!("Block must have at least one statement in this subset");
+//                 })
+//             }
+//             _ => unimplemented!("Other expressions not yet supported in SSA subset"),
+//         }
+//     }
+
+//     pub fn lower_program(&mut self, program: &[TypedExpr]) -> CIR {
+//         for expr in program {
+//             let _ = self.lower_expr(expr, self.blocks.len());
+//         }
+//         CIR {
+//             blocks: self.blocks.clone(),
+//         }
+//     }
+// }
+
+pub struct SSACIRBuilder {
+    blocks: Vec<CIRBlock>,
+    temp_counter: usize,
+    function_map: HashMap<String, usize>,
+    param_map: HashMap<String, ValueId>,
+}
+
+impl SSACIRBuilder {
+    pub fn new() -> Self {
+        SSACIRBuilder {
+            blocks: Vec::new(),
             temp_counter: 0,
-            label_counter: 0,
-            functions: HashMap::new(),
-            resolution_map,
+            function_map: HashMap::new(),
+            param_map: HashMap::new(),
         }
     }
 
-    pub fn emit(&mut self, op: CIROp) -> ValueId {
-        let result_id = match op {
-            CIROp::Store(_, _)
-            | CIROp::Label(_)
-            | CIROp::Jump(_)
-            | CIROp::Branch(_, _, _)
-            | CIROp::Return(_) => None,
-            _ => Some(self.new_temp()),
-        };
-        self.instructions.push(CIRInstruction::new(op));
-        result_id.unwrap_or_else(|| ValueId::Temp("unit".to_string()))
-    }
-
-    pub fn new_temp(&mut self) -> ValueId {
-        let temp = format!("tmp{}", self.temp_counter);
+    fn new_temp(&mut self) -> ValueId {
+        let temp = format!("%{}", self.temp_counter);
         self.temp_counter += 1;
-        ValueId::Temp(temp)
+        ValueId(temp)
     }
 
-    pub fn new_label(&mut self) -> String {
-        let label = format!("L{}", self.label_counter);
-        self.label_counter += 1;
-        label
+    fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
+        let result = self.new_temp();
+        if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
+            block
+                .instructions
+                .push(CIRInstruction::new(op, result.clone()));
+        }
+        result
     }
 
-    pub fn lower_expr(&mut self, expr: &TypedExpr) -> ValueId {
+    fn lower_expr(&mut self, expr: &TypedExpr, block_id: usize) -> ValueId {
         match &expr.kind {
             TypedExprKind::Value(val) => match val {
-                Value::Num(n) => self.emit(CIROp::Const(CirValue::Int(*n))),
+                Value::Num(n) => {
+                    let ty = CIRType::from(expr.type_info.as_type().unwrap());
+                    self.emit(
+                        block_id,
+                        CIROp::Const(ty, CirValue::Int((*n).try_into().unwrap())),
+                    )
+                }
                 Value::Identifier(name) => {
-                    if let Some(node_id) = self.resolution_map.resolve_name(name) {
-                        ValueId::Var(node_id)
+                    println!("Looking up '{}' in param_map: {:?}", name, self.param_map);
+                    if let Some(param_id) = self.param_map.get(*name) {
+                        param_id.clone()
                     } else {
-                        panic!("Unresolved identifier: {}", name); // For debugging
+                        panic!("Unresolved identifier: {}", name);
                     }
                 }
                 _ => unimplemented!("Other Value types not yet supported"),
             },
-            TypedExprKind::Let {
-                id,
-                expr: init_expr,
-                constness: _,
-                ..
-            } => {
-                let init_id = self.lower_expr(init_expr);
-                if let Value::Identifier(_) = id {
-                    self.emit(CIROp::Store(expr.node_id, init_id));
-                }
-                ValueId::Var(expr.node_id)
-            }
             TypedExprKind::Fn {
                 name,
                 params,
                 retty,
                 body,
             } => {
-                let fn_node_id = if let Value::Identifier(fn_name) = name {
-                    self.resolution_map
-                        .resolve_name(fn_name)
-                        .expect("Function not found")
+                if let Value::Identifier(fn_name) = name {
+                    let block_id = self.blocks.len();
+                    self.function_map.insert(fn_name.to_string(), block_id);
+                    self.blocks.push(CIRBlock {
+                        id: block_id,
+                        instructions: Vec::new(),
+                    });
+                    // Map parameters to ValueIds
+                    self.param_map.clear();
+                    println!("Params for {}: {:?}", fn_name, params);
+                    for (i, param) in params.iter().enumerate() {
+                        if let Value::Identifier(param_name) = &param.name {
+                            let param_id = ValueId(format!("param{}", i));
+                            self.param_map
+                                .insert(param_name.to_string(), param_id.clone());
+                            println!("Inserted '{}': {:?}", param_name, param_id);
+                        }
+                    }
+                    println!("param_map after insertion: {:?}", self.param_map);
+                    let body_id = self.lower_expr(body, block_id);
+                    self.emit(block_id, CIROp::Return(body_id));
+                    ValueId(format!("block{}", block_id))
                 } else {
                     panic!("Function name must be an identifier");
-                };
-                if let Value::Identifier("main") = name {
-                    let body_id = self.lower_expr(body);
-                    self.emit(CIROp::Return(body_id));
-                } else {
-                    let mut fn_builder = CIRBuilder::new(self.resolution_map.clone());
-                    let body_id = fn_builder.lower_expr(body);
-                    fn_builder.emit(CIROp::Return(body_id));
-                    self.functions
-                        .insert(fn_node_id, fn_builder.instructions.clone());
                 }
-                ValueId::Var(fn_node_id)
             }
             TypedExprKind::Call { name, args } => {
-                let fn_id = self.lower_expr(name);
                 let mut arg_ids = Vec::new();
                 for arg in args {
-                    arg_ids.push(self.lower_expr(arg));
+                    arg_ids.push(self.lower_expr(arg, block_id));
                 }
-                let fn_node_id =
-                    if let TypedExprKind::Value(Value::Identifier(fn_name)) = &name.kind {
-                        let resolved_id = self
-                            .resolution_map
-                            .resolve_name(fn_name)
-                            .expect("Function not found");
-                        println!("Resolving {} to NodeId: {:?}", fn_name, resolved_id);
-                        resolved_id
-                    } else {
-                        panic!("Call target must be an identifier");
-                    };
-                self.emit(CIROp::Call(fn_node_id, arg_ids))
+                if let TypedExprKind::Value(Value::Identifier(fn_name)) = &name.kind {
+                    let fn_block_id = *self
+                        .function_map
+                        .get(fn_name.clone())
+                        .expect("Function not found");
+                    let ty = CIRType::from(expr.type_info.as_type().unwrap());
+                    self.emit(block_id, CIROp::Call(fn_block_id, arg_ids))
+                } else {
+                    panic!("Call target must be an identifier");
+                }
             }
             TypedExprKind::BinOp { left, op, right } => {
-                let left_id = self.lower_expr(left);
-                let right_id = self.lower_expr(right);
+                let left_id = self.lower_expr(left, block_id);
+                let right_id = self.lower_expr(right, block_id);
+                let ty = CIRType::from(expr.type_info.as_type().unwrap());
                 match op {
-                    InfixOpKind::Add => self.emit(CIROp::Add(left_id, right_id)),
-                    InfixOpKind::Sub => self.emit(CIROp::Sub(left_id, right_id)),
-                    InfixOpKind::Mul => self.emit(CIROp::Mul(left_id, right_id)),
-                    InfixOpKind::Div => self.emit(CIROp::Div(left_id, right_id)),
-                    InfixOpKind::Greater => self.emit(CIROp::Gt(left_id, right_id)),
-                    InfixOpKind::Less => self.emit(CIROp::Lt(left_id, right_id)),
-                    InfixOpKind::Equals => self.emit(CIROp::Eq(left_id, right_id)),
-                    InfixOpKind::NotEq => self.emit(CIROp::Neq(left_id, right_id)),
-                    _ => todo!(),
+                    InfixOpKind::Add => self.emit(block_id, CIROp::Add(ty, left_id, right_id)),
+                    _ => unimplemented!("Only addition supported in this subset"),
                 }
             }
             TypedExprKind::Block { statements } => {
                 let mut last_id = None;
                 for stmt in statements {
-                    last_id = Some(self.lower_expr(stmt));
+                    last_id = Some(self.lower_expr(stmt, block_id));
                 }
-                if let Some(TypedExprKind::Let {
-                    id: Value::Identifier(_),
-                    ..
-                }) = statements.last().map(|e| &e.kind)
-                {
-                    last_id.unwrap_or_else(|| {
-                        statements
-                            .last()
-                            .map(|e| ValueId::Var(e.node_id))
-                            .unwrap_or_else(|| {
-                                self.emit(CIROp::Const(CirValue::Struct(HashMap::new())))
-                            })
-                    })
-                } else if let Some(TypedExprKind::Value(Value::Identifier(name))) =
-                    statements.last().map(|e| &e.kind)
-                {
-                    if let Some(node_id) = self.resolution_map.resolve_name(name) {
-                        ValueId::Var(node_id)
-                    } else {
-                        last_id.unwrap_or_else(|| {
-                            self.emit(CIROp::Const(CirValue::Struct(HashMap::new())))
-                        })
-                    }
-                } else {
-                    last_id.unwrap_or_else(|| {
-                        self.emit(CIROp::Const(CirValue::Struct(HashMap::new())))
-                    })
-                }
+                last_id.unwrap_or_else(|| {
+                    panic!("Block must have at least one statement in this subset");
+                })
             }
-            TypedExprKind::Struct { id: _, fields: _ } => ValueId::Var(expr.node_id),
-            TypedExprKind::List { elements } => {
-                let mut elem_ids = Vec::new();
-                for elem in elements {
-                    elem_ids.push(self.lower_expr(elem));
-                }
-                self.emit(CIROp::List(elem_ids))
-            }
-            TypedExprKind::If {
-                condition,
-                then_branch,
-                else_branch,
-            } => {
-                let cond_id = self.lower_expr(condition);
-                let then_label = self.new_label();
-                let else_label = self.new_label();
-                let end_label = self.new_label();
-
-                self.emit(CIROp::Branch(
-                    cond_id,
-                    then_label.clone(),
-                    else_label.clone(),
-                ));
-                self.emit(CIROp::Label(then_label));
-                let then_id = self.lower_expr(then_branch);
-                self.emit(CIROp::Jump(end_label.clone()));
-                self.emit(CIROp::Label(else_label));
-                let else_id = self.lower_expr(else_branch);
-                self.emit(CIROp::Label(end_label));
-                else_id
-            }
-            TypedExprKind::FieldAccess { expr, field } => {
-                let base_id = self.lower_expr(expr);
-                if let Value::Identifier(field_name) = field {
-                    self.emit(CIROp::GetField(base_id, field_name.to_string()))
-                } else {
-                    unimplemented!("Non-identifier field access")
-                }
-            }
-            TypedExprKind::Assign { target, expr } => {
-                let value_id = self.lower_expr(expr);
-                if let TypedExprKind::Value(Value::Identifier(_)) = &target.kind {
-                    self.emit(CIROp::Store(target.node_id, value_id.clone()));
-                }
-                value_id
-            }
+            _ => unimplemented!("Other expressions not yet supported in SSA subset"),
         }
     }
 
-    pub fn lower_program(
-        &mut self,
-        program: &[TypedExpr],
-    ) -> (Vec<CIRInstruction>, HashMap<NodeId, Vec<CIRInstruction>>) {
+    pub fn lower_program(&mut self, program: &[TypedExpr]) -> CIR {
         for expr in program {
-            let _ = self.lower_expr(expr);
+            let _ = self.lower_expr(expr, self.blocks.len());
         }
-        (self.instructions.clone(), self.functions.clone())
+        CIR {
+            blocks: self.blocks.clone(),
+        }
     }
 }

@@ -297,8 +297,5 @@ fn main() {
     // test_final_fuzz_program();
     //
 
-    //test_cir_lowering_simple();
-    //test_cir_lists_and_edge_cases();
-    test_cir_nested_conditionals();
-    //test_cir_nested_structs();
+    test_cir_ssa_simple();
 }
