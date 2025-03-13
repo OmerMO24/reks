@@ -1,15 +1,9 @@
+mod reks_eval;
 mod reks_parse;
 mod reks_type;
 use chumsky::{input::Stream, prelude::*};
-use logos::Logos;
-use reks_parse::lexer::Token;
-use reks_parse::operators::*;
-use reks_parse::parser::*;
-use reks_parse::utnode::*;
-use reks_type::infer::*;
-use reks_type::resolve::*;
+use reks_eval::test_cir::*;
 use reks_type::test_inference::*;
-use std::error::Error;
 
 // fn main() -> Result<(), Box<dyn Error>> {
 //let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
@@ -300,5 +294,11 @@ fn main() {
     // test_simple_program();
     // test_complex_realistic_program();
     // test_immutable_assignment_error();
-    test_final_fuzz_program();
+    // test_final_fuzz_program();
+    //
+
+    //test_cir_lowering_simple();
+    //test_cir_lists_and_edge_cases();
+    test_cir_nested_conditionals();
+    //test_cir_nested_structs();
 }

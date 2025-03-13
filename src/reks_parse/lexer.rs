@@ -137,6 +137,9 @@ pub enum Token<'src> {
     #[token("false")]
     TOKEN_FALSE,
 
+    #[token("consteval")]
+    TOKEN_CONST_EVAL,
+
     // Literals
     #[regex(r"-?[0-9]+", |lex| lex.slice().parse::<i64>().unwrap())]
     TOKEN_INT(i64),
