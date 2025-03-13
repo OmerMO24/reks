@@ -74,8 +74,8 @@ pub struct CIR {
 
 pub struct SSACIRBuilder {
     blocks: Vec<CIRBlock>,
-    temp_counter: usize,
     function_map: HashMap<String, usize>,
+    block_temp_counters: HashMap<usize, usize>, // Per-block temp counter
     param_map: HashMap<String, ValueId>,
 }
 
@@ -83,20 +83,21 @@ impl SSACIRBuilder {
     pub fn new() -> Self {
         SSACIRBuilder {
             blocks: Vec::new(),
-            temp_counter: 0,
             function_map: HashMap::new(),
+            block_temp_counters: HashMap::new(),
             param_map: HashMap::new(),
         }
     }
 
-    fn new_temp(&mut self) -> ValueId {
-        let temp = format!("%{}", self.temp_counter);
-        self.temp_counter += 1;
+    fn new_temp(&mut self, block_id: usize) -> ValueId {
+        let counter = self.block_temp_counters.entry(block_id).or_insert(0);
+        let temp = format!("%{}", *counter);
+        *counter += 1;
         ValueId(temp)
     }
 
     fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
-        let result = self.new_temp();
+        let result = self.new_temp(block_id);
         if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
             block
                 .instructions
@@ -138,11 +139,13 @@ impl SSACIRBuilder {
                         id: block_id,
                         instructions: Vec::new(),
                     });
+                    // Reset temp counter for this block
+                    self.block_temp_counters.insert(block_id, 0);
                     // Map parameters to ValueIds
                     self.param_map.clear();
                     println!("Params for {}: {:?}", fn_name, params);
                     for (i, param) in params.iter().enumerate() {
-                        if let Value::Identifier(param_name) = &param.name {
+                        if let Value::Identifier(param_name) = param.name {
                             let param_id = ValueId(format!("param{}", i));
                             self.param_map
                                 .insert(param_name.to_string(), param_id.clone());
