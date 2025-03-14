@@ -297,5 +297,7 @@ fn main() {
     // test_final_fuzz_program();
     //
 
-    test_cir_ssa_simple();
+    // test_cir_ssa_simple();
+    // test_cir_ssa_complex();
+    test_cir_ssa_conditionals();
 }

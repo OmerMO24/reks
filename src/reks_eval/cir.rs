@@ -9,21 +9,30 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub enum CirValue {
     Int(i32),
+    Bool(bool),
+    Struct(HashMap<String, CirValue>),
     // Add more as we expand (Bool, Struct, etc.)
 }
 
-// CIR Type (mirrors Type from infer.rs)
 #[derive(Debug, Clone)]
 pub enum CIRType {
     Int,
+    Bool, // For conditionals
     Function(Vec<CIRType>, Box<CIRType>),
-    // Add more as needed
+    Struct(HashMap<String, CIRType>), // Field name -> type
 }
 
 impl From<&Type> for CIRType {
     fn from(ty: &Type) -> Self {
         match ty {
             Type::Int => CIRType::Int,
+            Type::Bool => CIRType::Bool,
+            Type::Struct(_, fields) => CIRType::Struct(
+                fields
+                    .iter()
+                    .map(|(name, ty)| (name.clone(), CIRType::from(ty)))
+                    .collect(),
+            ),
             Type::Function(params, ret) => CIRType::Function(
                 params.iter().map(|t| t.into()).collect(),
                 Box::new(ret.as_ref().into()),
@@ -39,11 +48,21 @@ pub enum CIROp {
     Const(CIRType, CirValue),       // Literal value
     Add(CIRType, ValueId, ValueId), // Addition
     Call(usize, Vec<ValueId>),      // Call by block index
-    Return(ValueId),                // Return value
+    Return(ValueId),
+    Branch(ValueId, String, String), // condition, then_label, else_label
+    Label(String),
+    Jump(String), // Basic block label
+    Select(ValueId, ValueId, ValueId),
+    Gt(CIRType, ValueId, ValueId),             // Greater than
+    Lt(CIRType, ValueId, ValueId),             // Less than
+    Eq(CIRType, ValueId, ValueId),             // Equal
+    Neq(CIRType, ValueId, ValueId),            // Not equal
+    Struct(CIRType, HashMap<String, ValueId>), // Type and field values
+    GetField(ValueId, String),
 }
 
 // SSA ValueId (temporary or parameter slot)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ValueId(pub String);
 
 // CIR Instruction
@@ -75,8 +94,9 @@ pub struct CIR {
 pub struct SSACIRBuilder {
     blocks: Vec<CIRBlock>,
     function_map: HashMap<String, usize>,
-    block_temp_counters: HashMap<usize, usize>, // Per-block temp counter
+    block_temp_counters: HashMap<usize, usize>,
     param_map: HashMap<String, ValueId>,
+    label_counter: usize, // For unique labels
 }
 
 impl SSACIRBuilder {
@@ -86,6 +106,7 @@ impl SSACIRBuilder {
             function_map: HashMap::new(),
             block_temp_counters: HashMap::new(),
             param_map: HashMap::new(),
+            label_counter: 0,
         }
     }
 
@@ -96,8 +117,17 @@ impl SSACIRBuilder {
         ValueId(temp)
     }
 
+    fn new_label(&mut self) -> String {
+        let label = format!("L{}", self.label_counter);
+        self.label_counter += 1;
+        label
+    }
+
     fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
-        let result = self.new_temp(block_id);
+        let result = match op {
+            CIROp::Label(_) | CIROp::Branch(_, _, _) | CIROp::Return(_) => ValueId("".to_string()), // No result
+            _ => self.new_temp(block_id),
+        };
         if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
             block
                 .instructions
@@ -139,13 +169,11 @@ impl SSACIRBuilder {
                         id: block_id,
                         instructions: Vec::new(),
                     });
-                    // Reset temp counter for this block
                     self.block_temp_counters.insert(block_id, 0);
-                    // Map parameters to ValueIds
                     self.param_map.clear();
                     println!("Params for {}: {:?}", fn_name, params);
                     for (i, param) in params.iter().enumerate() {
-                        if let Value::Identifier(param_name) = param.name {
+                        if let Value::Identifier(param_name) = &param.name {
                             let param_id = ValueId(format!("param{}", i));
                             self.param_map
                                 .insert(param_name.to_string(), param_id.clone());
@@ -176,13 +204,40 @@ impl SSACIRBuilder {
                     panic!("Call target must be an identifier");
                 }
             }
+            TypedExprKind::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let cond_id = self.lower_expr(condition, block_id);
+                let then_label = self.new_label();
+                let else_label = self.new_label();
+                let end_label = self.new_label();
+
+                self.emit(
+                    block_id,
+                    CIROp::Branch(cond_id.clone(), then_label.clone(), else_label.clone()),
+                );
+                self.emit(block_id, CIROp::Label(then_label));
+                let then_id = self.lower_expr(then_branch, block_id);
+                self.emit(block_id, CIROp::Jump(end_label.clone()));
+                self.emit(block_id, CIROp::Label(else_label));
+                let else_id = self.lower_expr(else_branch, block_id);
+                self.emit(block_id, CIROp::Label(end_label));
+                let ty = CIRType::from(expr.type_info.as_type().unwrap());
+                self.emit(block_id, CIROp::Select(cond_id.clone(), then_id, else_id))
+            }
             TypedExprKind::BinOp { left, op, right } => {
                 let left_id = self.lower_expr(left, block_id);
                 let right_id = self.lower_expr(right, block_id);
                 let ty = CIRType::from(expr.type_info.as_type().unwrap());
                 match op {
                     InfixOpKind::Add => self.emit(block_id, CIROp::Add(ty, left_id, right_id)),
-                    _ => unimplemented!("Only addition supported in this subset"),
+                    InfixOpKind::Greater => self.emit(block_id, CIROp::Gt(ty, left_id, right_id)),
+                    InfixOpKind::Less => self.emit(block_id, CIROp::Lt(ty, left_id, right_id)),
+                    InfixOpKind::Equals => self.emit(block_id, CIROp::Eq(ty, left_id, right_id)),
+                    InfixOpKind::NotEq => self.emit(block_id, CIROp::Neq(ty, left_id, right_id)),
+                    _ => unimplemented!("Only basic comparisons supported in this subset"),
                 }
             }
             TypedExprKind::Block { statements } => {
@@ -193,6 +248,22 @@ impl SSACIRBuilder {
                 last_id.unwrap_or_else(|| {
                     panic!("Block must have at least one statement in this subset");
                 })
+            }
+            TypedExprKind::Struct { id, fields } => {
+                // Define struct type (stored in CIRType, no runtime effect yet)
+                let struct_type = CIRType::from(expr.type_info.as_type().unwrap());
+                // For now, we’ll assume this is an instance creation if fields have values
+                // If it’s a pure definition, it’s handled by type inference, not CIR
+                ValueId(format!("struct_def_{}", self.blocks.len())) // Placeholder, typically no CIR for pure defs
+            }
+            TypedExprKind::FieldAccess { expr, field } => {
+                let base_id = self.lower_expr(expr, block_id);
+                if let Value::Identifier(field_name) = field {
+                    let ty = CIRType::from(expr.type_info.as_type().unwrap());
+                    self.emit(block_id, CIROp::GetField(base_id, field_name.to_string()))
+                } else {
+                    panic!("Field access must use an identifier");
+                }
             }
             _ => unimplemented!("Other expressions not yet supported in SSA subset"),
         }

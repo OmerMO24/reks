@@ -43,7 +43,7 @@ pub enum TypeInfo {
 
 #[derive(Debug, Default)]
 pub struct Scope {
-    symbols: HashMap<String, Symbol>,
+    pub(crate) symbols: HashMap<String, Symbol>,
 }
 
 // #[derive(Debug)]
@@ -68,22 +68,22 @@ pub type NodeId = usize;
 // Information about a declaration
 #[derive(Debug, Clone)]
 pub struct DeclarationInfo {
-    name: String,
-    pub symbol: Symbol,
-    scope_level: usize,
+    pub(crate) name: String,
+    pub(crate) symbol: Symbol,
+    pub(crate) scope_level: usize,
 }
 
 // The resolution map that stores all the binding information
 #[derive(Debug, Clone)]
 pub struct NameResolutionMap {
     // Maps from an expression node to its declaration
-    bindings: HashMap<NodeId, NodeId>,
+    pub(crate) bindings: HashMap<NodeId, NodeId>,
 
     // Maps from a declaration node to its information
-    declarations: HashMap<NodeId, DeclarationInfo>,
+    pub(crate) declarations: HashMap<NodeId, DeclarationInfo>,
 
     // Counter for generating unique IDs
-    next_id: NodeId,
+    pub(crate) next_id: NodeId,
 }
 
 impl NameResolutionMap {
