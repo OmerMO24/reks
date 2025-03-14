@@ -299,5 +299,6 @@ fn main() {
 
     // test_cir_ssa_simple();
     // test_cir_ssa_complex();
-    test_cir_ssa_conditionals();
+    // test_cir_ssa_conditionals();
+    test_cir_ssa_structs();
 }

@@ -88,6 +88,7 @@ fn print_typed_expr(expr: &TypedExpr, indent: usize) {
             print_typed_expr(target, indent + 1);
             print_typed_expr(expr, indent + 1);
         }
+        _ => todo!(),
     }
 }
 

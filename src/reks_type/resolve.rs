@@ -125,7 +125,7 @@ impl NameResolutionMap {
     }
 
     // Look up the declaration for a reference
-    fn resolve_reference(&self, ref_id: &NodeId) -> Option<&DeclarationInfo> {
+    pub(crate) fn resolve_reference(&self, ref_id: &NodeId) -> Option<&DeclarationInfo> {
         self.bindings
             .get(ref_id)
             .and_then(|decl_id| self.declarations.get(decl_id))
@@ -444,7 +444,22 @@ impl NameResolver {
                     self.resolve_expr(item);
                 }
             }
+            UntypedExpr::StructInit { id, fields } => {
+                // Resolve the struct type name
+                if let Value::Identifier(struct_name) = id {
+                    if let Some(decl_id) = self.resolve_to_id(struct_name) {
+                        self.resolution_map.record_binding(node_id, decl_id);
+                    } else {
+                        println!("Warning: Struct type '{}' not found", struct_name);
+                        // Could add an error here if strict checking is desired
+                    }
+                }
 
+                // Resolve field value expressions
+                for (_, value_expr) in fields {
+                    self.resolve_expr(value_expr);
+                }
+            }
             UntypedExpr::Struct { .. } => {
                 // Struct declarations are handled in the first pass of resolve_program
                 // Nothing to do here for name resolution

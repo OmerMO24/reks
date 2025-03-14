@@ -257,6 +257,35 @@ impl Interpreter {
                         .insert(instr.result.clone(), result);
                     self.pc += 1;
                 }
+                CIROp::Struct(ty, field_values) => {
+                    let fields: HashMap<String, CirValue> = field_values
+                        .iter()
+                        .map(|(name, value_id)| {
+                            let value = self.temps[&self.current_block][value_id].clone();
+                            (name.clone(), value)
+                        })
+                        .collect();
+                    let result = CirValue::Struct(fields);
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
+                CIROp::GetField(base_id, field_name) => {
+                    let base = self.temps[&self.current_block][base_id].clone();
+                    let result = match base {
+                        CirValue::Struct(fields) => fields[field_name].clone(),
+                        _ => panic!("GetField on non-struct"),
+                    };
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
                 _ => unimplemented!("Instruction not yet supported"),
             }
         }

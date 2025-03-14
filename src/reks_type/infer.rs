@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 // Assuming these are defined in your existing code
 use crate::reks_parse::operators::InfixOpKind; // Adjust path as needed
 use crate::reks_parse::utnode::{Const, Param, TypePath, UntypedExpr, Value}; // Adjust path
-use crate::reks_type::resolve::{NameResolutionMap, NodeId}; // Adjust path
+use crate::reks_type::resolve::{NameResolutionMap, NodeId, Symbol}; // Adjust path
 
 // In src/reks_type/infer.rs (or wherever TypedExpr is defined)
 
@@ -62,6 +62,11 @@ pub enum TypedExprKind<'src> {
         target: Box<TypedExpr<'src>>,
         expr: Box<TypedExpr<'src>>,
     },
+    // New variant for struct initialization
+    StructInit {
+        id: Value<'src>,                             // Struct name
+        fields: Vec<(Value<'src>, TypedExpr<'src>)>, // (field_name, value)
+    },
 }
 
 // Type Information
@@ -106,11 +111,16 @@ pub enum Type {
 #[derive(Debug)]
 pub enum TypeError {
     UnificationFail(Type, Type),
+    InvalidStructInit(String),
     InfiniteType(usize, Type),
     UnknownVariable(String),
     NotAFunction(Type),
     InvalidTypeAnnotation(String),
     ImmutableAssignment(String),
+    UndefinedStruct(String),
+    UnknownField(String),
+    NotAStruct(String),
+    TypeMismatch { expected: String, found: String },
 }
 
 // Type Environment and Substitution
@@ -306,6 +316,13 @@ impl<'src> TypeInferencer {
             UntypedExpr::Assign { left, right } => TypedExprKind::Assign {
                 target: Box::new(self.convert_to_typed_ast(left)),
                 expr: Box::new(self.convert_to_typed_ast(right)),
+            },
+            UntypedExpr::StructInit { id, fields } => TypedExprKind::StructInit {
+                id: id.clone(),
+                fields: fields
+                    .iter()
+                    .map(|(name, expr)| (name.clone(), self.convert_to_typed_ast(expr)))
+                    .collect(),
             },
             _ => todo!(),
         };
@@ -636,6 +653,90 @@ impl<'src> TypeInferencer {
                     TypedExprKind::Assign {
                         target: Box::new(target_typed),
                         expr: Box::new(expr_typed),
+                    },
+                )
+            }
+            TypedExprKind::StructInit { id, fields } => {
+                let struct_name = if let Value::Identifier(name) = id {
+                    name
+                } else {
+                    panic!("StructInit id must be an identifier"); // Temporary panic
+                };
+                // Resolve struct declaration
+                let struct_decl_id = self
+                    .resolution_map
+                    .resolve_name(struct_name)
+                    .expect("Struct type not found"); // Temporary expect
+                let struct_symbol = self
+                    .resolution_map
+                    .declarations
+                    .get(&struct_decl_id)
+                    .expect("Struct declaration not found");
+                let (struct_type_name, struct_fields) = match &struct_symbol.symbol {
+                    Symbol::Struct { name, fields } => (name.clone(), fields.clone()),
+                    _ => panic!("Expected a struct symbol"), // Temporary panic
+                };
+                // Build expected field types
+                let expected_field_types: HashMap<String, Type> = struct_fields
+                    .iter()
+                    .map(|(name, ty_str)| {
+                        (
+                            name.clone(),
+                            match ty_str.as_str() {
+                                "i32" => Type::Int,
+                                "f32" => Type::Float,
+                                "bool" => Type::Bool,
+                                "string" => Type::String,
+                                s => Type::Struct(s.to_string(), vec![]),
+                            },
+                        )
+                    })
+                    .collect();
+                // Infer field values
+                let mut typed_fields = Vec::new();
+                for (field_name, value_expr) in fields {
+                    let field_name_str = if let Value::Identifier(name) = field_name {
+                        name.clone()
+                    } else {
+                        panic!("Field name must be an identifier"); // Temporary panic
+                    };
+                    let typed_value = self
+                        .infer_expr(value_expr.clone())
+                        .expect("Failed to infer field value"); // Temporary expect
+                    let value_type = typed_value
+                        .type_info
+                        .as_type()
+                        .expect("Field value type inference failed");
+                    let expected_type = expected_field_types
+                        .get(field_name_str.clone())
+                        .expect("Field not found in struct definition");
+                    self.subst = unify(expected_type, value_type, &self.subst)
+                        .expect("Type unification failed for field");
+                    typed_fields.push((field_name.clone(), typed_value));
+                }
+                let struct_type = Type::Struct(
+                    struct_type_name,
+                    struct_fields
+                        .iter()
+                        .map(|(name, ty_str)| {
+                            (
+                                name.clone(),
+                                match ty_str.as_str() {
+                                    "i32" => Type::Int,
+                                    "f32" => Type::Float,
+                                    "bool" => Type::Bool,
+                                    "string" => Type::String,
+                                    s => Type::Struct(s.to_string(), vec![]),
+                                },
+                            )
+                        })
+                        .collect(),
+                );
+                (
+                    struct_type.clone(),
+                    TypedExprKind::StructInit {
+                        id: id.clone(),
+                        fields: typed_fields,
                     },
                 )
             }

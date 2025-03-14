@@ -17,6 +17,7 @@ pub enum CirValue {
 #[derive(Debug, Clone)]
 pub enum CIRType {
     Int,
+    Unit,
     Bool, // For conditionals
     Function(Vec<CIRType>, Box<CIRType>),
     Struct(HashMap<String, CIRType>), // Field name -> type
@@ -37,6 +38,7 @@ impl From<&Type> for CIRType {
                 params.iter().map(|t| t.into()).collect(),
                 Box::new(ret.as_ref().into()),
             ),
+            Type::Unit => CIRType::Unit, // Add this
             _ => unimplemented!("Other types not yet supported"),
         }
     }
@@ -156,6 +158,18 @@ impl SSACIRBuilder {
                 }
                 _ => unimplemented!("Other Value types not yet supported"),
             },
+            TypedExprKind::Let {
+                id,
+                pat,
+                expr,
+                constness,
+            } => {
+                let value_id = self.lower_expr(expr, block_id);
+                if let Value::Identifier(name) = id {
+                    self.param_map.insert(name.to_string(), value_id.clone());
+                }
+                value_id // Return the value_id of the expression (e.g., for let p = ...)
+            }
             TypedExprKind::Fn {
                 name,
                 params,
@@ -265,13 +279,65 @@ impl SSACIRBuilder {
                     panic!("Field access must use an identifier");
                 }
             }
+            TypedExprKind::StructInit { id, fields } => {
+                let struct_name = if let Value::Identifier(name) = id {
+                    name.to_string()
+                } else {
+                    panic!("StructInit id must be an identifier");
+                };
+                let field_values: HashMap<String, ValueId> = fields
+                    .iter()
+                    .map(|(field_name, value_expr)| {
+                        let field_name_str: String = if let Value::Identifier(name) = field_name {
+                            name.to_string()
+                        } else {
+                            panic!("Field name must be an identifier");
+                        };
+                        let value_id = self.lower_expr(value_expr, block_id);
+                        (field_name_str, value_id)
+                    })
+                    .collect();
+                let struct_type = match &expr.type_info {
+                    TypeInfo::Known(ty) | TypeInfo::Inferred(ty) => CIRType::from(ty),
+                    TypeInfo::Unknown => panic!("Struct type not inferred for {}", struct_name),
+                };
+                self.emit(block_id, CIROp::Struct(struct_type, field_values))
+            }
             _ => unimplemented!("Other expressions not yet supported in SSA subset"),
         }
     }
 
     pub fn lower_program(&mut self, program: &[TypedExpr]) -> CIR {
+        let mut fn_index = 0;
         for expr in program {
-            let _ = self.lower_expr(expr, self.blocks.len());
+            match &expr.kind {
+                TypedExprKind::Fn {
+                    name, params, body, ..
+                } => {
+                    let block_id = fn_index;
+                    fn_index += 1;
+                    self.blocks.push(CIRBlock {
+                        id: block_id,
+                        instructions: vec![],
+                    });
+                    println!("Params for {:?}: {:?}", name, params);
+                    for param in params {
+                        if let Value::Identifier(p_name) = &param.name {
+                            let param_id = ValueId(format!("param{}", self.param_map.len()));
+                            self.param_map.insert(p_name.to_string(), param_id.clone());
+                            println!("Inserted '{}': {:?}", p_name, param_id);
+                        }
+                    }
+                    let body_id = self.lower_expr(body, block_id);
+                    self.emit(block_id, CIROp::Return(body_id));
+                    println!("param_map after insertion: {:?}", self.param_map);
+                }
+                TypedExprKind::Struct { id, .. } => {
+                    // Struct definitions don’t generate CIR blocks—skip for now
+                    // Could store metadata if needed later
+                }
+                _ => panic!("Top-level expression must be a function or struct definition"),
+            }
         }
         CIR {
             blocks: self.blocks.clone(),

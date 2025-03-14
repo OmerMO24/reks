@@ -99,4 +99,9 @@ pub enum UntypedExpr<'src> {
         left: Box<Self>,
         right: Box<Self>,
     },
+    // New variant for struct initialization
+    StructInit {
+        id: Value<'src>,                  // Struct name (e.g., "P")
+        fields: Vec<(Value<'src>, Self)>, // (field_name, value)
+    },
 }
