@@ -145,6 +145,14 @@ impl Interpreter {
                         self.current_block, self.call_stack
                     );
                 }
+                CIROp::Store(target_id, value_id) => {
+                    let value = self.temps[&self.current_block][value_id].clone();
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(target_id.clone(), value);
+                    self.pc += 1;
+                }
                 CIROp::Return(val_id) => {
                     let result = self.temps[&self.current_block][val_id].clone();
                     println!("Returning from block {}: {:?}", self.current_block, result);

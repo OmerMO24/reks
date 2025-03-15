@@ -61,6 +61,7 @@ pub enum CIROp {
     Neq(CIRType, ValueId, ValueId),            // Not equal
     Struct(CIRType, HashMap<String, ValueId>), // Type and field values
     GetField(ValueId, String),
+    Store(ValueId, ValueId),
 }
 
 // SSA ValueId (temporary or parameter slot)
@@ -278,6 +279,12 @@ impl SSACIRBuilder {
                 } else {
                     panic!("Field access must use an identifier");
                 }
+            }
+            TypedExprKind::Assign { target, expr } => {
+                let target_id = self.lower_expr(target, block_id);
+                let value_id = self.lower_expr(expr, block_id);
+                self.emit(block_id, CIROp::Store(target_id, value_id));
+                ValueId("unit".to_string()) // Return a dummy ID for Unit
             }
             TypedExprKind::StructInit { id, fields } => {
                 let struct_name = if let Value::Identifier(name) = id {

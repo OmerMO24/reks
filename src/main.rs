@@ -1,3 +1,4 @@
+mod reks_compile;
 mod reks_eval;
 mod reks_parse;
 mod reks_type;
@@ -300,5 +301,6 @@ fn main() {
     // test_cir_ssa_simple();
     // test_cir_ssa_complex();
     // test_cir_ssa_conditionals();
-    test_cir_ssa_structs();
+    // test_cir_ssa_structs();
+    test_cir_ssa_assignments();
 }
