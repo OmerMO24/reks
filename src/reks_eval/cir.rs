@@ -12,6 +12,7 @@ pub enum CirValue {
     Bool(bool),
     Struct(HashMap<String, CirValue>),
     List(Vec<CirValue>),
+    Unit,
     // Add more as we expand (Bool, Struct, etc.)
 }
 
@@ -219,6 +220,8 @@ impl SSACIRBuilder {
                     arg_ids.push(self.lower_expr(arg, block_id));
                 }
                 if let TypedExprKind::Value(Value::Identifier(fn_name)) = &name.kind {
+                    println!("the function map: {:?}", self.function_map);
+                    println!("The function's name is: {:?}", fn_name);
                     let fn_block_id = *self
                         .function_map
                         .get(fn_name.clone())
@@ -275,6 +278,7 @@ impl SSACIRBuilder {
                 for stmt in statements {
                     last_id = Some(self.lower_expr(stmt, block_id));
                 }
+                println!("The last id: {:?}", last_id);
                 last_id.unwrap_or_else(|| {
                     panic!("Block must have at least one statement in this subset");
                 })
@@ -358,6 +362,10 @@ impl SSACIRBuilder {
                         id: block_id,
                         instructions: vec![],
                     });
+                    if let Value::Identifier(fn_name) = name {
+                        self.function_map.insert(fn_name.to_string(), block_id);
+                        // Add to function_map
+                    }
                     println!("Params for {:?}: {:?}", name, params);
                     for param in params {
                         if let Value::Identifier(p_name) = &param.name {
@@ -370,11 +378,15 @@ impl SSACIRBuilder {
                     self.emit(block_id, CIROp::Return(body_id));
                     println!("param_map after insertion: {:?}", self.param_map);
                 }
-                TypedExprKind::Struct { id, .. } => {
-                    // Struct definitions don’t generate CIR blocks—skip for now
-                    // Could store metadata if needed later
+                _ => {
+                    let block_id = self.blocks.len();
+                    self.blocks.push(CIRBlock {
+                        id: block_id,
+                        instructions: vec![],
+                    });
+                    let expr_id = self.lower_expr(expr, block_id);
+                    self.emit(block_id, CIROp::Return(expr_id));
                 }
-                _ => panic!("Top-level expression must be a function or struct definition"),
             }
         }
         CIR {

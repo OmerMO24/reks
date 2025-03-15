@@ -553,3 +553,146 @@ pub fn test_cir_ssa_binops_extended() {
     let result = interp.run(0);
     println!("Result: {:?}", result);
 }
+
+pub fn test_cir_ssa_add() {
+    let test_program = vec![
+        UntypedExpr::Fn {
+            name: Value::Identifier("add"),
+            params: vec![
+                Param {
+                    name: Value::Identifier("a"),
+                    ty: Value::Identifier("i32"),
+                },
+                Param {
+                    name: Value::Identifier("b"),
+                    ty: Value::Identifier("i32"),
+                },
+            ],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::BinOp {
+                left: Box::new(UntypedExpr::Value(Value::Identifier("a"))),
+                op: InfixOpKind::Add,
+                right: Box::new(UntypedExpr::Value(Value::Identifier("b"))),
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Call {
+                name: Box::new(UntypedExpr::Value(Value::Identifier("add"))),
+                args: vec![
+                    UntypedExpr::Value(Value::Num(3)),
+                    UntypedExpr::Value(Value::Num(4)),
+                ],
+            }),
+        },
+    ];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    println!("The resolution map: {:?}", resolution_map);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+
+    let mut builder = SSACIRBuilder::new();
+    let cir = builder.lower_program(&typed_ast);
+    println!("SSA CIR Blocks:");
+    for block in &cir.blocks {
+        println!("Block {}:", block.id);
+        for (i, instr) in block.instructions.iter().enumerate() {
+            println!("  {}: {} = {:?}", i, instr.result.0, instr.op);
+        }
+    }
+    let mut interp = Interpreter::new(cir);
+    let result = interp.run(1); // Block 1 for main
+    println!("Result: {:?}", result);
+}
+
+pub fn test_cir_ssa_factorial_simple() {
+    let test_program = vec![
+        UntypedExpr::Fn {
+            name: Value::Identifier("factorial"),
+            params: vec![Param {
+                name: Value::Identifier("n"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("result"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::If {
+                        condition: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+                            op: InfixOpKind::Greater,
+                            right: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        }),
+                        then_branch: Box::new(UntypedExpr::Block {
+                            statements: vec![UntypedExpr::Assign {
+                                left: Box::new(UntypedExpr::Value(Value::Identifier("result"))),
+                                right: Box::new(UntypedExpr::BinOp {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("result"))),
+                                    op: InfixOpKind::Mul,
+                                    right: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+                                }),
+                            }],
+                        }),
+                        else_branch: Box::new(UntypedExpr::Block { statements: vec![] }),
+                    },
+                    UntypedExpr::Value(Value::Identifier("result")),
+                ],
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Call {
+                name: Box::new(UntypedExpr::Value(Value::Identifier("factorial"))),
+                args: vec![UntypedExpr::Value(Value::Num(5))],
+            }),
+        },
+    ];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    println!("The resolution map: {:?}", resolution_map);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+
+    let mut builder = SSACIRBuilder::new();
+    let cir = builder.lower_program(&typed_ast);
+    println!("SSA CIR Blocks:");
+    for block in &cir.blocks {
+        println!("Block {}:", block.id);
+        for (i, instr) in block.instructions.iter().enumerate() {
+            println!("  {}: {} = {:?}", i, instr.result.0, instr.op);
+        }
+    }
+    let mut interp = Interpreter::new(cir);
+    let result = interp.run(1); // Block 1 for main
+    println!("Result: {:?}", result);
+}
