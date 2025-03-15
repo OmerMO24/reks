@@ -378,6 +378,12 @@ impl SSACIRBuilder {
                     self.emit(block_id, CIROp::Return(body_id));
                     println!("param_map after insertion: {:?}", self.param_map);
                 }
+                TypedExprKind::Struct { id, .. } => {
+
+                    // Struct definitions don’t generate CIR blocks—skip for now
+
+                    // Could store metadata if needed later
+                }
                 _ => {
                     let block_id = self.blocks.len();
                     self.blocks.push(CIRBlock {
