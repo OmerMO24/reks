@@ -117,6 +117,78 @@ impl Interpreter {
                         .insert(instr.result.clone(), result);
                     self.pc += 1;
                 }
+                CIROp::Sub(left_id, right_id) => {
+                    let left = self.temps[&self.current_block][left_id].clone();
+                    let right = self.temps[&self.current_block][right_id].clone();
+                    let result = match (left, right) {
+                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Int(l - r),
+                        _ => panic!("Subtraction only supported for integers"), // Temporary panic
+                    };
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
+                CIROp::Mul(left_id, right_id) => {
+                    let left = self.temps[&self.current_block][left_id].clone();
+                    let right = self.temps[&self.current_block][right_id].clone();
+                    let result = match (left, right) {
+                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Int(l * r),
+                        _ => panic!("Multiplication only supported for integers"), // Temporary panic
+                    };
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
+                CIROp::Div(left_id, right_id) => {
+                    let left = self.temps[&self.current_block][left_id].clone();
+                    let right = self.temps[&self.current_block][right_id].clone();
+                    let result = match (left, right) {
+                        (CirValue::Int(l), CirValue::Int(r)) if r != 0 => CirValue::Int(l / r),
+                        (CirValue::Int(_), CirValue::Int(0)) => panic!("Division by zero"), // Temporary panic
+                        _ => panic!("Division only supported for integers"), // Temporary panic
+                    };
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
+                CIROp::Exponent(base_id, exp_id) => {
+                    let base = self.temps[&self.current_block][base_id].clone();
+                    let exp = self.temps[&self.current_block][exp_id].clone();
+                    let result = match (base, exp) {
+                        (CirValue::Int(b), CirValue::Int(e)) => CirValue::Int(b.pow(e as u32)), // Assuming e >= 0
+                        _ => panic!("Exponentiation only supported for integers"), // Temporary panic
+                    };
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
+                CIROp::Modulo(left_id, right_id) => {
+                    let left = self.temps[&self.current_block][left_id].clone();
+                    let right = self.temps[&self.current_block][right_id].clone();
+                    let result = match (left, right) {
+                        (CirValue::Int(l), CirValue::Int(r)) if r != 0 => CirValue::Int(l % r),
+                        (CirValue::Int(_), CirValue::Int(0)) => panic!("Modulo by zero"), // Temporary panic
+                        _ => panic!("Modulo only supported for integers"), // Temporary panic
+                    };
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
                 CIROp::Call(block_id, arg_ids) => {
                     let args: Vec<CirValue> = arg_ids
                         .iter()

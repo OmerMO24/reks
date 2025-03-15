@@ -457,3 +457,99 @@ pub fn test_cir_ssa_lists() {
     let result = interp.run(0);
     println!("Result: {:?}", result);
 }
+
+pub fn test_cir_ssa_binops() {
+    let test_program = vec![UntypedExpr::Fn {
+        name: Value::Identifier("main"),
+        params: vec![],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![UntypedExpr::BinOp {
+                left: Box::new(UntypedExpr::Value(Value::Num(5))),
+                op: InfixOpKind::Sub,
+                right: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::BinOp {
+                        left: Box::new(UntypedExpr::Value(Value::Num(2))),
+                        op: InfixOpKind::Mul,
+                        right: Box::new(UntypedExpr::Value(Value::Num(3))),
+                    }),
+                    op: InfixOpKind::Div,
+                    right: Box::new(UntypedExpr::Value(Value::Num(2))),
+                }),
+            }],
+        }),
+    }];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+
+    let mut builder = SSACIRBuilder::new();
+    let cir = builder.lower_program(&typed_ast);
+    println!("SSA CIR Blocks:");
+    for block in &cir.blocks {
+        println!("Block {}:", block.id);
+        for (i, instr) in block.instructions.iter().enumerate() {
+            println!("  {}: {} = {:?}", i, instr.result.0, instr.op);
+        }
+    }
+    let mut interp = Interpreter::new(cir);
+    let result = interp.run(0);
+    println!("Result: {:?}", result);
+}
+
+pub fn test_cir_ssa_binops_extended() {
+    let test_program = vec![UntypedExpr::Fn {
+        name: Value::Identifier("main"),
+        params: vec![],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![UntypedExpr::BinOp {
+                left: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Num(2))),
+                    op: InfixOpKind::Exp,
+                    right: Box::new(UntypedExpr::Value(Value::Num(3))),
+                }),
+                op: InfixOpKind::Mod,
+                right: Box::new(UntypedExpr::Value(Value::Num(5))),
+            }],
+        }),
+    }];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+
+    let mut builder = SSACIRBuilder::new();
+    let cir = builder.lower_program(&typed_ast);
+    println!("SSA CIR Blocks:");
+    for block in &cir.blocks {
+        println!("Block {}:", block.id);
+        for (i, instr) in block.instructions.iter().enumerate() {
+            println!("  {}: {} = {:?}", i, instr.result.0, instr.op);
+        }
+    }
+    let mut interp = Interpreter::new(cir);
+    let result = interp.run(0);
+    println!("Result: {:?}", result);
+}

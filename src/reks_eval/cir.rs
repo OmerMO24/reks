@@ -67,6 +67,11 @@ pub enum CIROp {
     Store(ValueId, ValueId),
     List(Vec<ValueId>),
     Index(ValueId, ValueId),
+    Sub(ValueId, ValueId),
+    Mul(ValueId, ValueId),
+    Div(ValueId, ValueId),
+    Exponent(ValueId, ValueId), // base ^ exp
+    Modulo(ValueId, ValueId),
 }
 
 // SSA ValueId (temporary or parameter slot)
@@ -257,6 +262,11 @@ impl SSACIRBuilder {
                     InfixOpKind::Less => self.emit(block_id, CIROp::Lt(ty, left_id, right_id)),
                     InfixOpKind::Equals => self.emit(block_id, CIROp::Eq(ty, left_id, right_id)),
                     InfixOpKind::NotEq => self.emit(block_id, CIROp::Neq(ty, left_id, right_id)),
+                    InfixOpKind::Sub => self.emit(block_id, CIROp::Sub(left_id, right_id)),
+                    InfixOpKind::Mul => self.emit(block_id, CIROp::Mul(left_id, right_id)),
+                    InfixOpKind::Div => self.emit(block_id, CIROp::Div(left_id, right_id)),
+                    InfixOpKind::Exp => self.emit(block_id, CIROp::Exponent(left_id, right_id)),
+                    InfixOpKind::Mod => self.emit(block_id, CIROp::Modulo(left_id, right_id)),
                     _ => unimplemented!("Only basic comparisons supported in this subset"),
                 }
             }

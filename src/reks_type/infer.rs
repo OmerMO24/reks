@@ -526,7 +526,12 @@ impl<'src> TypeInferencer {
                 let t_right = right_typed.type_info.clone().into_type().unwrap();
 
                 let ty = match op {
-                    InfixOpKind::Add | InfixOpKind::Sub | InfixOpKind::Mul | InfixOpKind::Div => {
+                    InfixOpKind::Add
+                    | InfixOpKind::Sub
+                    | InfixOpKind::Mul
+                    | InfixOpKind::Div
+                    | InfixOpKind::Exp
+                    | InfixOpKind::Mod => {
                         self.subst = unify(&t_left, &t_right, &self.subst)?;
                         self.subst = unify(&t_left, &Type::Int, &self.subst)?;
                         Type::Int
