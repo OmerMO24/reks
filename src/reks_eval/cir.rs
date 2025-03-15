@@ -11,6 +11,7 @@ pub enum CirValue {
     Int(i32),
     Bool(bool),
     Struct(HashMap<String, CirValue>),
+    List(Vec<CirValue>),
     // Add more as we expand (Bool, Struct, etc.)
 }
 
@@ -21,6 +22,7 @@ pub enum CIRType {
     Bool, // For conditionals
     Function(Vec<CIRType>, Box<CIRType>),
     Struct(HashMap<String, CIRType>), // Field name -> type
+    List(Box<CIRType>),
 }
 
 impl From<&Type> for CIRType {
@@ -39,6 +41,7 @@ impl From<&Type> for CIRType {
                 Box::new(ret.as_ref().into()),
             ),
             Type::Unit => CIRType::Unit, // Add this
+            Type::List(elem_ty) => CIRType::List(Box::new(CIRType::from(elem_ty.as_ref()))),
             _ => unimplemented!("Other types not yet supported"),
         }
     }
@@ -62,6 +65,8 @@ pub enum CIROp {
     Struct(CIRType, HashMap<String, ValueId>), // Type and field values
     GetField(ValueId, String),
     Store(ValueId, ValueId),
+    List(Vec<ValueId>),
+    Index(ValueId, ValueId),
 }
 
 // SSA ValueId (temporary or parameter slot)
@@ -280,6 +285,17 @@ impl SSACIRBuilder {
                     panic!("Field access must use an identifier");
                 }
             }
+            TypedExprKind::List { elements } => {
+                let element_ids: Vec<ValueId> = elements
+                    .iter()
+                    .map(|elem| self.lower_expr(elem, block_id))
+                    .collect();
+                let list_type = match &expr.type_info {
+                    TypeInfo::Known(ty) | TypeInfo::Inferred(ty) => CIRType::from(ty),
+                    TypeInfo::Unknown => panic!("List type not inferred"), // Temporary panic
+                };
+                self.emit(block_id, CIROp::List(element_ids))
+            }
             TypedExprKind::Assign { target, expr } => {
                 let target_id = self.lower_expr(target, block_id);
                 let value_id = self.lower_expr(expr, block_id);
@@ -309,6 +325,11 @@ impl SSACIRBuilder {
                     TypeInfo::Unknown => panic!("Struct type not inferred for {}", struct_name),
                 };
                 self.emit(block_id, CIROp::Struct(struct_type, field_values))
+            }
+            TypedExprKind::Index { expr, index } => {
+                let list_id = self.lower_expr(expr, block_id);
+                let index_id = self.lower_expr(index, block_id);
+                self.emit(block_id, CIROp::Index(list_id, index_id))
             }
             _ => unimplemented!("Other expressions not yet supported in SSA subset"),
         }

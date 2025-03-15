@@ -271,7 +271,10 @@ impl NameResolver {
                     self.resolution_map.record_binding(node_id, decl_id);
                 }
             }
-
+            UntypedExpr::Index { expr, index } => {
+                self.resolve_expr(expr);
+                self.resolve_expr(index);
+            }
             UntypedExpr::Value(_) => {
                 // Literal values don't need name resolution
             }

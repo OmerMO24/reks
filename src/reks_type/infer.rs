@@ -67,6 +67,10 @@ pub enum TypedExprKind<'src> {
         id: Value<'src>,                             // Struct name
         fields: Vec<(Value<'src>, TypedExpr<'src>)>, // (field_name, value)
     },
+    Index {
+        expr: Box<TypedExpr<'src>>,
+        index: Box<TypedExpr<'src>>,
+    },
 }
 
 // Type Information
@@ -107,6 +111,54 @@ pub enum Type {
     Unit,
 }
 
+use std::fmt;
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Int => write!(f, "Int"),
+            Type::Float => write!(f, "Float"),
+            Type::Bool => write!(f, "Bool"),
+            Type::String => write!(f, "String"),
+            Type::TypeVar(id) => write!(f, "t{}", id),
+            Type::Struct(name, _) => write!(f, "{}", name), // Simplified, could list fields
+            Type::Function(params, ret) => {
+                let param_str = params
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "fn({}) -> {}", param_str, ret)
+            }
+            Type::List(elem_ty) => write!(f, "[{}]", elem_ty),
+            Type::Unit => write!(f, "Unit"),
+        }
+    }
+}
+
+impl fmt::Display for TypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TypeError::UnificationFail(t1, t2) => write!(f, "Cannot unify {} with {}", t1, t2),
+            TypeError::InvalidStructInit(msg) => write!(f, "Invalid struct init: {}", msg),
+            TypeError::InfiniteType(id, ty) => write!(f, "Infinite type t{} in {}", id, ty),
+            TypeError::UnknownVariable(name) => write!(f, "Unknown variable: {}", name),
+            TypeError::NotAFunction(ty) => write!(f, "Not a function: {}", ty),
+            TypeError::InvalidTypeAnnotation(msg) => write!(f, "Invalid type annotation: {}", msg),
+            TypeError::ImmutableAssignment(name) => {
+                write!(f, "Cannot assign to immutable variable: {}", name)
+            }
+            TypeError::UndefinedStruct(name) => write!(f, "Undefined struct: {}", name),
+            TypeError::UnknownField(name) => write!(f, "Unknown field: {}", name),
+            TypeError::NotAStruct(name) => write!(f, "Not a struct: {}", name),
+            TypeError::TypeMismatch { expected, found } => {
+                write!(f, "Type mismatch: expected {}, found {}", expected, found)
+            }
+            _ => todo!(),
+        }
+    }
+}
+
 // Type Inference Errors
 #[derive(Debug)]
 pub enum TypeError {
@@ -121,6 +173,7 @@ pub enum TypeError {
     UnknownField(String),
     NotAStruct(String),
     TypeMismatch { expected: String, found: String },
+    TypeInferenceFailed,
 }
 
 // Type Environment and Substitution
@@ -323,6 +376,10 @@ impl<'src> TypeInferencer {
                     .iter()
                     .map(|(name, expr)| (name.clone(), self.convert_to_typed_ast(expr)))
                     .collect(),
+            },
+            UntypedExpr::Index { expr, index } => TypedExprKind::Index {
+                expr: Box::new(self.convert_to_typed_ast(expr)),
+                index: Box::new(self.convert_to_typed_ast(index)),
             },
             _ => todo!(),
         };
@@ -737,6 +794,37 @@ impl<'src> TypeInferencer {
                     TypedExprKind::StructInit {
                         id: id.clone(),
                         fields: typed_fields,
+                    },
+                )
+            }
+            TypedExprKind::Index { expr, index } => {
+                let expr_typed = self.infer_expr(*expr)?;
+                let expr_type = expr_typed
+                    .type_info
+                    .clone()
+                    .into_type()
+                    .ok_or_else(|| TypeError::TypeInferenceFailed)?;
+                let index_typed = self.infer_expr(*index)?;
+                let index_type = index_typed
+                    .type_info
+                    .clone()
+                    .into_type()
+                    .ok_or_else(|| TypeError::TypeInferenceFailed)?;
+                self.subst = unify(&index_type, &Type::Int, &self.subst)?; // Index must be Int
+                let element_type = match expr_type {
+                    Type::List(elem_ty) => *elem_ty,
+                    _ => {
+                        return Err(TypeError::TypeMismatch {
+                            expected: "list".to_string(),
+                            found: expr_type.to_string(),
+                        })
+                    }
+                };
+                (
+                    element_type.clone(),
+                    TypedExprKind::Index {
+                        expr: Box::new(expr_typed),
+                        index: Box::new(index_typed),
                     },
                 )
             }

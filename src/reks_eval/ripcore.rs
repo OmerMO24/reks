@@ -294,6 +294,36 @@ impl Interpreter {
                         .insert(instr.result.clone(), result);
                     self.pc += 1;
                 }
+                CIROp::List(element_ids) => {
+                    let elements: Vec<CirValue> = element_ids
+                        .iter()
+                        .map(|id| self.temps[&self.current_block][id].clone())
+                        .collect();
+                    let result = CirValue::List(elements);
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
+                CIROp::Index(list_id, index_id) => {
+                    let list = self.temps[&self.current_block][list_id].clone();
+                    let index = self.temps[&self.current_block][index_id].clone();
+                    let result = match (list, index) {
+                        (CirValue::List(elements), CirValue::Int(i)) => elements
+                            .get(i as usize)
+                            .cloned()
+                            .expect("Index out of bounds"),
+                        _ => panic!("Invalid list or index type"),
+                    };
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
                 _ => unimplemented!("Instruction not yet supported"),
             }
         }

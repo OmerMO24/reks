@@ -104,4 +104,8 @@ pub enum UntypedExpr<'src> {
         id: Value<'src>,                  // Struct name (e.g., "P")
         fields: Vec<(Value<'src>, Self)>, // (field_name, value)
     },
+    Index {
+        expr: Box<Self>,
+        index: Box<Self>,
+    },
 }
