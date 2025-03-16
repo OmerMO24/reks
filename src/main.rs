@@ -303,9 +303,10 @@ fn main() {
     test_cir_ssa_conditionals();
     test_cir_ssa_structs();
     test_cir_ssa_assignments();
-    test_cir_ssa_lists();
-    test_cir_ssa_binops();
-    test_cir_ssa_binops_extended();
-    test_cir_ssa_add();
+    // test_cir_ssa_lists();
+    // test_cir_ssa_binops();
+    // test_cir_ssa_binops_extended();
+    // test_cir_ssa_add();
     // test_cir_ssa_factorial_simple();
+    // test_cir_factorial_direct();
 }

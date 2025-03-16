@@ -232,28 +232,69 @@ impl SSACIRBuilder {
                     panic!("Call target must be an identifier");
                 }
             }
+            // TypedExprKind::If {
+            //     condition,
+            //     then_branch,
+            //     else_branch,
+            // } => {
+            //     let cond_id = self.lower_expr(condition, block_id);
+            //     let then_label = self.new_label();
+            //     let else_label = self.new_label();
+            //     let end_label = self.new_label();
+
+            //     self.emit(
+            //         block_id,
+            //         CIROp::Branch(cond_id.clone(), then_label.clone(), else_label.clone()),
+            //     );
+            //     self.emit(block_id, CIROp::Label(then_label));
+            //     let then_id = self.lower_expr(then_branch, block_id);
+            //     self.emit(block_id, CIROp::Jump(end_label.clone()));
+            //     self.emit(block_id, CIROp::Label(else_label));
+            //     let else_id = self.lower_expr(else_branch, block_id);
+            //     self.emit(block_id, CIROp::Label(end_label));
+            //     let ty = CIRType::from(expr.type_info.as_type().unwrap());
+            //     self.emit(block_id, CIROp::Select(cond_id.clone(), then_id, else_id))
+            // }
+            // For the If expression handler:
             TypedExprKind::If {
                 condition,
                 then_branch,
                 else_branch,
             } => {
                 let cond_id = self.lower_expr(condition, block_id);
-                let then_label = self.new_label();
-                let else_label = self.new_label();
-                let end_label = self.new_label();
+                let then_label = format!("L{}", self.blocks.len() * 10);
+                let else_label = format!("L{}", self.blocks.len() * 10 + 1);
+                let merge_label = format!("L{}", self.blocks.len() * 10 + 2);
 
                 self.emit(
                     block_id,
                     CIROp::Branch(cond_id.clone(), then_label.clone(), else_label.clone()),
                 );
+
                 self.emit(block_id, CIROp::Label(then_label));
                 let then_id = self.lower_expr(then_branch, block_id);
-                self.emit(block_id, CIROp::Jump(end_label.clone()));
+
+                self.emit(block_id, CIROp::Jump(merge_label.clone()));
                 self.emit(block_id, CIROp::Label(else_label));
                 let else_id = self.lower_expr(else_branch, block_id);
-                self.emit(block_id, CIROp::Label(end_label));
-                let ty = CIRType::from(expr.type_info.as_type().unwrap());
-                self.emit(block_id, CIROp::Select(cond_id.clone(), then_id, else_id))
+
+                self.emit(block_id, CIROp::Label(merge_label));
+                let select_id = self.new_temp(block_id);
+                let result = self.emit(block_id, CIROp::Select(cond_id, then_id, else_id));
+
+                // IMPORTANT: Store the select_id so we can use it consistently
+                if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
+                    // Make sure we update the last instruction's result ID
+                    if let Some(last_instr) = block.instructions.last_mut() {
+                        // Only modify if it's the Select operation we just emitted
+                        if matches!(last_instr.op, CIROp::Select(_, _, _)) {
+                            // We want the return instruction to use the same ID
+                            last_instr.result = select_id.clone();
+                        }
+                    }
+                }
+
+                select_id
             }
             TypedExprKind::BinOp { left, op, right } => {
                 let left_id = self.lower_expr(left, block_id);

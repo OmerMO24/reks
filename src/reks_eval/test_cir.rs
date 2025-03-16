@@ -696,3 +696,171 @@ pub fn test_cir_ssa_factorial_simple() {
     let result = interp.run(1); // Block 1 for main
     println!("Result: {:?}", result);
 }
+
+use crate::reks_parse::operators::InfixOpKind;
+use crate::reks_parse::utnode::{Const, Param, TypePath, Value};
+use crate::reks_type::infer::{Type, TypeInfo, TypedExpr, TypedExprKind};
+
+pub fn test_cir_factorial_direct() {
+    let typed_ast = vec![
+        // fn factorial(n: i32) -> i32
+        TypedExpr {
+            kind: TypedExprKind::Fn {
+                name: Value::Identifier("factorial"),
+                params: vec![Param {
+                    name: Value::Identifier("n"),
+                    ty: Value::Identifier("i32"),
+                }],
+                retty: Box::new(TypedExpr {
+                    kind: TypedExprKind::Value(Value::Identifier("i32")),
+                    type_info: TypeInfo::Known(Type::Int),
+                    node_id: 0,
+                }),
+                body: Box::new(TypedExpr {
+                    kind: TypedExprKind::Block {
+                        statements: vec![
+                            // if n > 0 { n * factorial(n - 1) } else { 1 }
+                            TypedExpr {
+                                kind: TypedExprKind::If {
+                                    condition: Box::new(TypedExpr {
+                                        kind: TypedExprKind::BinOp {
+                                            left: Box::new(TypedExpr {
+                                                kind: TypedExprKind::Value(Value::Identifier("n")),
+                                                type_info: TypeInfo::Known(Type::Int),
+                                                node_id: 1,
+                                            }),
+                                            op: InfixOpKind::Greater,
+                                            right: Box::new(TypedExpr {
+                                                kind: TypedExprKind::Value(Value::Num(0)),
+                                                type_info: TypeInfo::Known(Type::Int),
+                                                node_id: 2,
+                                            }),
+                                        },
+                                        type_info: TypeInfo::Known(Type::Bool),
+                                        node_id: 3,
+                                    }),
+                                    then_branch: Box::new(TypedExpr {
+                                        kind: TypedExprKind::BinOp {
+                                            left: Box::new(TypedExpr {
+                                                kind: TypedExprKind::Value(Value::Identifier("n")),
+                                                type_info: TypeInfo::Known(Type::Int),
+                                                node_id: 4,
+                                            }),
+                                            op: InfixOpKind::Mul,
+                                            right: Box::new(TypedExpr {
+                                                kind: TypedExprKind::Call {
+                                                    name: Box::new(TypedExpr {
+                                                        kind: TypedExprKind::Value(
+                                                            Value::Identifier("factorial"),
+                                                        ),
+                                                        type_info: TypeInfo::Known(Type::Function(
+                                                            vec![Type::Int],
+                                                            Box::new(Type::Int),
+                                                        )),
+                                                        node_id: 5,
+                                                    }),
+                                                    args: vec![TypedExpr {
+                                                        kind: TypedExprKind::BinOp {
+                                                            left: Box::new(TypedExpr {
+                                                                kind: TypedExprKind::Value(
+                                                                    Value::Identifier("n"),
+                                                                ),
+                                                                type_info: TypeInfo::Known(
+                                                                    Type::Int,
+                                                                ),
+                                                                node_id: 6,
+                                                            }),
+                                                            op: InfixOpKind::Sub,
+                                                            right: Box::new(TypedExpr {
+                                                                kind: TypedExprKind::Value(
+                                                                    Value::Num(1),
+                                                                ),
+                                                                type_info: TypeInfo::Known(
+                                                                    Type::Int,
+                                                                ),
+                                                                node_id: 7,
+                                                            }),
+                                                        },
+                                                        type_info: TypeInfo::Known(Type::Int),
+                                                        node_id: 8,
+                                                    }],
+                                                },
+                                                type_info: TypeInfo::Known(Type::Int),
+                                                node_id: 9,
+                                            }),
+                                        },
+                                        type_info: TypeInfo::Known(Type::Int),
+                                        node_id: 10,
+                                    }),
+                                    else_branch: Box::new(TypedExpr {
+                                        kind: TypedExprKind::Block {
+                                            statements: vec![TypedExpr {
+                                                kind: TypedExprKind::Value(Value::Num(1)),
+                                                type_info: TypeInfo::Known(Type::Int),
+                                                node_id: 11,
+                                            }],
+                                        },
+                                        type_info: TypeInfo::Known(Type::Int),
+                                        node_id: 12,
+                                    }),
+                                },
+                                type_info: TypeInfo::Known(Type::Int),
+                                node_id: 13,
+                            },
+                        ],
+                    },
+                    type_info: TypeInfo::Known(Type::Int),
+                    node_id: 14,
+                }),
+            },
+            type_info: TypeInfo::Known(Type::Function(vec![Type::Int], Box::new(Type::Int))),
+            node_id: 15,
+        },
+        // fn main() -> i32 { factorial(5) }
+        TypedExpr {
+            kind: TypedExprKind::Fn {
+                name: Value::Identifier("main"),
+                params: vec![],
+                retty: Box::new(TypedExpr {
+                    kind: TypedExprKind::Value(Value::Identifier("i32")),
+                    type_info: TypeInfo::Known(Type::Int),
+                    node_id: 16,
+                }),
+                body: Box::new(TypedExpr {
+                    kind: TypedExprKind::Call {
+                        name: Box::new(TypedExpr {
+                            kind: TypedExprKind::Value(Value::Identifier("factorial")),
+                            type_info: TypeInfo::Known(Type::Function(
+                                vec![Type::Int],
+                                Box::new(Type::Int),
+                            )),
+                            node_id: 17,
+                        }),
+                        args: vec![TypedExpr {
+                            kind: TypedExprKind::Value(Value::Num(5)),
+                            type_info: TypeInfo::Known(Type::Int),
+                            node_id: 18,
+                        }],
+                    },
+                    type_info: TypeInfo::Known(Type::Int),
+                    node_id: 19,
+                }),
+            },
+            type_info: TypeInfo::Known(Type::Function(vec![], Box::new(Type::Int))),
+            node_id: 20,
+        },
+    ];
+
+    let mut builder = SSACIRBuilder::new();
+    let cir = builder.lower_program(&typed_ast);
+    println!("SSA CIR Blocks:");
+    for block in &cir.blocks {
+        println!("Block {}:", block.id);
+        for (i, instr) in block.instructions.iter().enumerate() {
+            println!("  {}: {} = {:?}", i, instr.result.0, instr.op);
+        }
+    }
+    let mut interp = Interpreter::new(cir);
+    let result = interp.run(1); // Block 1 for main
+    println!("Result: {:?}", result);
+}
