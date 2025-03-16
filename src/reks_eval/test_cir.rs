@@ -67,7 +67,7 @@ pub fn test_cir_ssa_simple() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 is main
+    let result = interp.run(); // Block 1 is main
     println!("Result: {:?}", result);
 }
 
@@ -231,7 +231,7 @@ pub fn test_cir_ssa_conditionals() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 is main
+    let result = interp.run(); // Block 1 is main
     println!("Result: {:?}", result);
 }
 
@@ -313,7 +313,7 @@ pub fn test_cir_ssa_structs() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(0); // Changed to run(0)
+    let result = interp.run(); // Changed to run(0)
     println!("Result: {:?}", result);
 }
 
@@ -399,7 +399,7 @@ pub fn test_cir_ssa_assignments() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(0); // Block 0 since main is first
+    let result = interp.run(); // Block 0 since main is first
     println!("Result: {:?}", result);
 }
 
@@ -454,7 +454,7 @@ pub fn test_cir_ssa_lists() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(0);
+    let result = interp.run();
     println!("Result: {:?}", result);
 }
 
@@ -504,7 +504,7 @@ pub fn test_cir_ssa_binops() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(0);
+    let result = interp.run();
     println!("Result: {:?}", result);
 }
 
@@ -550,7 +550,7 @@ pub fn test_cir_ssa_binops_extended() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(0);
+    let result = interp.run();
     println!("Result: {:?}", result);
 }
 
@@ -614,7 +614,7 @@ pub fn test_cir_ssa_add() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 for main
+    let result = interp.run(); // Block 1 for main
     println!("Result: {:?}", result);
 }
 
@@ -695,7 +695,7 @@ pub fn test_cir_ssa_factorial_simple() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 for main
+    let result = interp.run(); // Block 1 for main
     println!("Result: {:?}", result);
 }
 
@@ -863,7 +863,7 @@ pub fn test_cir_factorial_direct() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 for main
+    let result = interp.run(); // Block 1 for main
     println!("Result: {:?}", result);
 }
 
@@ -1057,7 +1057,7 @@ pub fn test_cir_fib_direct() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 for main
+    let result = interp.run(); // Block 1 for main
     println!("Result: {:?}", result);
 }
 
@@ -1137,7 +1137,7 @@ pub fn test_compute_four() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 is main
+    let result = interp.run(); // Block 1 is main
     println!("Result: {:?}", result);
 }
 
@@ -1213,7 +1213,7 @@ pub fn test_multiple_assignments() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 is main
+    let result = interp.run(); // Block 1 is main
     println!("Result: {:?}", result);
 }
 
@@ -1292,7 +1292,7 @@ pub fn test_struct_stuff() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 is main
+    let result = interp.run(); // Block 1 is main
     println!("Result: {:?}", result);
 }
 
@@ -1361,7 +1361,7 @@ pub fn test_untyped_factorial() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 is main
+    let result = interp.run(); // Block 1 is main
     println!("Result: {:?}", result);
 }
 
@@ -1485,6 +1485,145 @@ pub fn test_multiple_functions() {
         }
     }
     let mut interp = Interpreter::new(cir);
-    let result = interp.run(1); // Block 1 is main
+    let result = interp.run(); // Block 1 is main
+    println!("Result: {:?}", result);
+}
+
+pub fn test_many_functions() {
+    let test_program = vec![
+        UntypedExpr::Fn {
+            name: Value::Identifier("double"),
+            params: vec![Param {
+                name: Value::Identifier("x"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::BinOp {
+                left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                op: InfixOpKind::Add,
+                right: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("triple"),
+            params: vec![Param {
+                name: Value::Identifier("x"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::If {
+                condition: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                    op: InfixOpKind::Greater,
+                    right: Box::new(UntypedExpr::Value(Value::Num(0))),
+                }),
+                then_branch: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Call {
+                        name: Box::new(UntypedExpr::Value(Value::Identifier("double"))),
+                        args: vec![UntypedExpr::Value(Value::Identifier("x"))],
+                    }),
+                    op: InfixOpKind::Add,
+                    right: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                }),
+                else_branch: Box::new(UntypedExpr::Value(Value::Num(0))),
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("square"),
+            params: vec![Param {
+                name: Value::Identifier("x"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::If {
+                condition: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                    op: InfixOpKind::NotEq,
+                    right: Box::new(UntypedExpr::Value(Value::Num(0))),
+                }),
+                then_branch: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Call {
+                        name: Box::new(UntypedExpr::Value(Value::Identifier("triple"))),
+                        args: vec![UntypedExpr::Value(Value::Identifier("x"))],
+                    }),
+                    op: InfixOpKind::Sub,
+                    right: Box::new(UntypedExpr::Call {
+                        name: Box::new(UntypedExpr::Value(Value::Identifier("double"))),
+                        args: vec![UntypedExpr::Value(Value::Identifier("x"))],
+                    }),
+                }),
+                else_branch: Box::new(UntypedExpr::Value(Value::Num(0))),
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("compute"),
+            params: vec![Param {
+                name: Value::Identifier("n"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::If {
+                condition: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+                    op: InfixOpKind::Greater,
+                    right: Box::new(UntypedExpr::Value(Value::Num(2))),
+                }),
+                then_branch: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Call {
+                        name: Box::new(UntypedExpr::Value(Value::Identifier("square"))),
+                        args: vec![UntypedExpr::Value(Value::Identifier("n"))],
+                    }),
+                    op: InfixOpKind::Add,
+                    right: Box::new(UntypedExpr::Call {
+                        name: Box::new(UntypedExpr::Value(Value::Identifier("triple"))),
+                        args: vec![UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+                            op: InfixOpKind::Sub,
+                            right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        }],
+                    }),
+                }),
+                else_branch: Box::new(UntypedExpr::Call {
+                    name: Box::new(UntypedExpr::Value(Value::Identifier("double"))),
+                    args: vec![UntypedExpr::Value(Value::Identifier("n"))],
+                }),
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Call {
+                name: Box::new(UntypedExpr::Value(Value::Identifier("compute"))),
+                args: vec![UntypedExpr::Value(Value::Num(2))],
+            }),
+        },
+    ];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+
+    let mut builder = SSACIRBuilder::new();
+    let cir = builder.lower_program(&typed_ast);
+    println!("SSA CIR Blocks:");
+    for block in &cir.blocks {
+        println!("Block {}:", block.id);
+        for (i, instr) in block.instructions.iter().enumerate() {
+            println!("  {}: {} = {:?}", i, instr.result.0, instr.op);
+        }
+    }
+    let mut interp = Interpreter::new(cir);
+    let result = interp.run(); // Block 1 is main
     println!("Result: {:?}", result);
 }

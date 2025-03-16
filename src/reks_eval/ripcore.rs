@@ -22,8 +22,31 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
+    // pub fn new(cir: CIR) -> Self {
+    //     // Precompute label map
+    //     let mut label_map = HashMap::new();
+    //     for block in &cir.blocks {
+    //         let mut block_labels = HashMap::new();
+    //         for (i, instr) in block.instructions.iter().enumerate() {
+    //             if let CIROp::Label(label) = &instr.op {
+    //                 block_labels.insert(label.clone(), i);
+    //             }
+    //         }
+    //         label_map.insert(block.id, block_labels);
+    //     }
+
+    //     Interpreter {
+    //         cir,
+    //         stack: Vec::new(),
+    //         temps: HashMap::new(),
+    //         call_stack: Vec::new(),
+    //         current_block: 0, // Start at main (assumed block 1, we’ll set it)
+    //         pc: 0,
+    //         label_map,
+    //     }
+    // }
+
     pub fn new(cir: CIR) -> Self {
-        // Precompute label map
         let mut label_map = HashMap::new();
         for block in &cir.blocks {
             let mut block_labels = HashMap::new();
@@ -34,20 +57,22 @@ impl Interpreter {
             }
             label_map.insert(block.id, block_labels);
         }
-
+        let main_block = *cir
+            .function_map
+            .get("main")
+            .expect("No 'main' function found");
         Interpreter {
             cir,
             stack: Vec::new(),
             temps: HashMap::new(),
             call_stack: Vec::new(),
-            current_block: 0, // Start at main (assumed block 1, we’ll set it)
+            current_block: main_block, // Start at main
             pc: 0,
             label_map,
         }
     }
 
-    pub fn run(&mut self, entry_block: usize) -> Option<CirValue> {
-        self.current_block = entry_block;
+    pub fn run(&mut self) -> Option<CirValue> {
         self.pc = 0;
         self.temps.insert(self.current_block, HashMap::new());
         println!("Starting at block {}:", self.current_block);
@@ -224,17 +249,27 @@ impl Interpreter {
                 //         .iter()
                 //         .map(|id| self.temps[&self.current_block][id].clone())
                 //         .collect();
+
+                //     // Create a frame that saves the ENTIRE current environment
                 //     self.call_stack.push(CallFrame {
                 //         block_id: self.current_block,
                 //         return_pc: self.pc + 1,
                 //         return_slot: Some(instr.result.clone()),
+                //         // Save a complete copy of the current block's temps
+                //         temps: self.temps.get(&self.current_block).cloned(),
                 //     });
+
+                //     // Switch to the called function
                 //     self.current_block = *block_id;
                 //     self.pc = 0;
+
+                //     // Create a fresh environment for the called function
                 //     self.temps
                 //         .entry(self.current_block)
-                //         .or_insert_with(HashMap::new);
-                //     let block = &self.cir.blocks[self.current_block];
+                //         .or_insert_with(HashMap::new)
+                //         .clear();
+
+                //     // Set up parameters in the fresh environment
                 //     for (i, arg) in args.into_iter().enumerate() {
                 //         let param_id = ValueId(format!("param{}", i));
                 //         self.temps
@@ -242,6 +277,7 @@ impl Interpreter {
                 //             .unwrap()
                 //             .insert(param_id, arg);
                 //     }
+
                 //     println!(
                 //         "Called block {}: Stack: {:?}",
                 //         self.current_block, self.call_stack
@@ -252,39 +288,25 @@ impl Interpreter {
                         .iter()
                         .map(|id| self.temps[&self.current_block][id].clone())
                         .collect();
-
-                    // Create a frame that saves the ENTIRE current environment
                     self.call_stack.push(CallFrame {
                         block_id: self.current_block,
                         return_pc: self.pc + 1,
                         return_slot: Some(instr.result.clone()),
-                        // Save a complete copy of the current block's temps
-                        temps: self.temps.get(&self.current_block).cloned(),
+                        temps: Some(self.temps.get(&self.current_block).cloned().unwrap()),
                     });
-
-                    // Switch to the called function
                     self.current_block = *block_id;
                     self.pc = 0;
-
-                    // Create a fresh environment for the called function
                     self.temps
                         .entry(self.current_block)
                         .or_insert_with(HashMap::new)
                         .clear();
-
-                    // Set up parameters in the fresh environment
                     for (i, arg) in args.into_iter().enumerate() {
-                        let param_id = ValueId(format!("param{}", i));
+                        let param_id = ValueId(format!("param{}", i + self.current_block * 10)); // Match builder
                         self.temps
                             .get_mut(&self.current_block)
                             .unwrap()
                             .insert(param_id, arg);
                     }
-
-                    println!(
-                        "Called block {}: Stack: {:?}",
-                        self.current_block, self.call_stack
-                    );
                 }
                 CIROp::Store(target_id, value_id) => {
                     let value = self.temps[&self.current_block][value_id].clone();
@@ -451,22 +473,6 @@ impl Interpreter {
                     self.pc = self.label_map[&self.current_block][label];
                     println!("Jumping to {} at PC {}", label, self.pc);
                 }
-                // CIROp::Select(cond_id, then_id, else_id) => {
-                //     let cond = self.temps[&self.current_block][cond_id].clone();
-                //     let then_val = self.temps[&self.current_block].get(then_id).cloned();
-                //     let else_val = self.temps[&self.current_block].get(else_id).cloned();
-                //     let result = match cond {
-                //         CirValue::Bool(true) => then_val.expect("Then branch value missing"),
-                //         CirValue::Bool(false) => else_val.expect("Else branch value missing"),
-                //         _ => panic!("Invalid condition type for Select"),
-                //     };
-                //     self.stack.push(result.clone());
-                //     self.temps
-                //         .get_mut(&self.current_block)
-                //         .unwrap()
-                //         .insert(instr.result.clone(), result);
-                //     self.pc += 1;
-                // }
                 CIROp::Select(cond_id, then_id, else_id) => {
                     let cond = self.temps[&self.current_block][cond_id].clone();
                     let then_val = self.temps[&self.current_block].get(then_id).cloned();

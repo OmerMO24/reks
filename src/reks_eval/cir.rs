@@ -105,6 +105,7 @@ pub struct CIRBlock {
 #[derive(Debug, Clone)]
 pub struct CIR {
     pub blocks: Vec<CIRBlock>,
+    pub function_map: HashMap<String, usize>,
 }
 
 pub struct SSACIRBuilder {
@@ -448,26 +449,18 @@ impl SSACIRBuilder {
     //                 });
     //                 if let Value::Identifier(fn_name) = name {
     //                     self.function_map.insert(fn_name.to_string(), block_id);
-    //                     // Add to function_map
     //                 }
-    //                 println!("Params for {:?}: {:?}", name, params);
-    //                 for param in params {
+    //                 self.param_map.clear(); // Reset per function
+    //                 for (i, param) in params.iter().enumerate() {
     //                     if let Value::Identifier(p_name) = &param.name {
-    //                         let param_id = ValueId(format!("param{}", self.param_map.len()));
+    //                         let param_id = ValueId(format!("param{}", i + block_id * 10)); // Unique per block
     //                         self.param_map.insert(p_name.to_string(), param_id.clone());
-    //                         println!("Inserted '{}': {:?}", p_name, param_id);
     //                     }
     //                 }
     //                 let body_id = self.lower_expr(body, block_id);
     //                 self.emit(block_id, CIROp::Return(body_id));
-    //                 println!("param_map after insertion: {:?}", self.param_map);
     //             }
-    //             TypedExprKind::Struct { id, .. } => {
-
-    //                 // Struct definitions don’t generate CIR blocks—skip for now
-
-    //                 // Could store metadata if needed later
-    //             }
+    //             TypedExprKind::Struct { .. } => {}
     //             _ => {
     //                 let block_id = self.blocks.len();
     //                 self.blocks.push(CIRBlock {
@@ -500,10 +493,10 @@ impl SSACIRBuilder {
                     if let Value::Identifier(fn_name) = name {
                         self.function_map.insert(fn_name.to_string(), block_id);
                     }
-                    self.param_map.clear(); // Reset per function
+                    self.param_map.clear();
                     for (i, param) in params.iter().enumerate() {
-                        if let Value::Identifier(p_name) = &param.name {
-                            let param_id = ValueId(format!("param{}", i + block_id * 10)); // Unique per block
+                        if let Value::Identifier(p_name) = param.name {
+                            let param_id = ValueId(format!("param{}", i + block_id * 10));
                             self.param_map.insert(p_name.to_string(), param_id.clone());
                         }
                     }
@@ -524,6 +517,7 @@ impl SSACIRBuilder {
         }
         CIR {
             blocks: self.blocks.clone(),
+            function_map: self.function_map.clone(),
         }
     }
 }

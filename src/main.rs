@@ -313,6 +313,7 @@ fn main() {
     // test_compute_four();
     // test_multiple_assignments();
     // test_struct_stuff();
-    // test_untyped_factorial();
-    test_multiple_functions();
+    //test_untyped_factorial();
+    // test_multiple_functions();
+    test_many_functions();
 }
