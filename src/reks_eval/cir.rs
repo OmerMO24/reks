@@ -59,8 +59,10 @@ pub enum CIROp {
     Label(String),
     Jump(String), // Basic block label
     Select(ValueId, ValueId, ValueId),
-    Gt(CIRType, ValueId, ValueId),             // Greater than
-    Lt(CIRType, ValueId, ValueId),             // Less than
+    Gt(CIRType, ValueId, ValueId), // Greater than
+    GtOrEq(CIRType, ValueId, ValueId),
+    Lt(CIRType, ValueId, ValueId), // Less than
+    LtOrEq(CIRType, ValueId, ValueId),
     Eq(CIRType, ValueId, ValueId),             // Equal
     Neq(CIRType, ValueId, ValueId),            // Not equal
     Struct(CIRType, HashMap<String, ValueId>), // Type and field values
@@ -303,7 +305,13 @@ impl SSACIRBuilder {
                 match op {
                     InfixOpKind::Add => self.emit(block_id, CIROp::Add(ty, left_id, right_id)),
                     InfixOpKind::Greater => self.emit(block_id, CIROp::Gt(ty, left_id, right_id)),
+                    InfixOpKind::GreaterOrEq => {
+                        self.emit(block_id, CIROp::GtOrEq(ty, left_id, right_id))
+                    }
                     InfixOpKind::Less => self.emit(block_id, CIROp::Lt(ty, left_id, right_id)),
+                    InfixOpKind::LessOrEq => {
+                        self.emit(block_id, CIROp::LtOrEq(ty, left_id, right_id))
+                    }
                     InfixOpKind::Equals => self.emit(block_id, CIROp::Eq(ty, left_id, right_id)),
                     InfixOpKind::NotEq => self.emit(block_id, CIROp::Neq(ty, left_id, right_id)),
                     InfixOpKind::Sub => self.emit(block_id, CIROp::Sub(left_id, right_id)),

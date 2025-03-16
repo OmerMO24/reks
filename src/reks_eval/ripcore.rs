@@ -363,11 +363,39 @@ impl Interpreter {
                         .insert(instr.result.clone(), result);
                     self.pc += 1;
                 }
+                CIROp::GtOrEq(ty, left_id, right_id) => {
+                    let right = self.temps[&self.current_block][right_id].clone();
+                    let left = self.temps[&self.current_block][left_id].clone();
+                    let result = match (left, right) {
+                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Bool(l >= r),
+                        _ => panic!("Invalid types for Gt"),
+                    };
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
                 CIROp::Lt(ty, left_id, right_id) => {
                     let right = self.temps[&self.current_block][right_id].clone();
                     let left = self.temps[&self.current_block][left_id].clone();
                     let result = match (left, right) {
                         (CirValue::Int(l), CirValue::Int(r)) => CirValue::Bool(l < r),
+                        _ => panic!("Invalid types for Lt"),
+                    };
+                    self.stack.push(result.clone());
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(instr.result.clone(), result);
+                    self.pc += 1;
+                }
+                CIROp::LtOrEq(ty, left_id, right_id) => {
+                    let right = self.temps[&self.current_block][right_id].clone();
+                    let left = self.temps[&self.current_block][left_id].clone();
+                    let result = match (left, right) {
+                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Bool(l <= r),
                         _ => panic!("Invalid types for Lt"),
                     };
                     self.stack.push(result.clone());
