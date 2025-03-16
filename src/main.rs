@@ -309,5 +309,10 @@ fn main() {
     // test_cir_ssa_add();
     // test_cir_ssa_factorial_simple();
     // test_cir_factorial_direct();
-    test_cir_fib_direct();
+    // test_cir_fib_direct();
+    // test_compute_four();
+    // test_multiple_assignments();
+    // test_struct_stuff();
+    // test_untyped_factorial();
+    test_multiple_functions();
 }

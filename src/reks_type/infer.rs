@@ -554,14 +554,36 @@ impl<'src> TypeInferencer {
                     },
                 )
             }
+            // TypedExprKind::Block { statements } => {
+            //     let mut block_type = Type::Unit;
+            //     let mut typed_statements = Vec::new();
+            //     for stmt in statements {
+            //         let stmt_typed = self.infer_expr(stmt)?;
+            //         block_type = stmt_typed.type_info.clone().into_type().unwrap();
+            //         typed_statements.push(stmt_typed);
+            //     }
+            //     (
+            //         block_type,
+            //         TypedExprKind::Block {
+            //             statements: typed_statements,
+            //         },
+            //     )
+            // }
             TypedExprKind::Block { statements } => {
-                let mut block_type = Type::Unit;
                 let mut typed_statements = Vec::new();
                 for stmt in statements {
-                    let stmt_typed = self.infer_expr(stmt)?;
-                    block_type = stmt_typed.type_info.clone().into_type().unwrap();
+                    let stmt_typed = self.infer_expr(stmt.clone())?;
                     typed_statements.push(stmt_typed);
                 }
+                let block_type = if typed_statements.is_empty() {
+                    Type::Unit
+                } else {
+                    typed_statements
+                        .last()
+                        .and_then(|stmt| stmt.type_info.clone().into_type())
+                        .filter(|ty| *ty != Type::Unit)
+                        .unwrap_or(Type::Unit)
+                };
                 (
                     block_type,
                     TypedExprKind::Block {
@@ -623,6 +645,31 @@ impl<'src> TypeInferencer {
                     },
                 )
             }
+            // TypedExprKind::If {
+            //     condition,
+            //     then_branch,
+            //     else_branch,
+            // } => {
+            //     let cond_typed = self.infer_expr(*condition)?;
+            //     let cond_type = cond_typed.type_info.clone().into_type().unwrap();
+            //     self.subst = unify(&cond_type, &Type::Bool, &self.subst)?;
+
+            //     let then_typed = self.infer_expr(*then_branch)?;
+            //     let then_type = then_typed.type_info.clone().into_type().unwrap();
+
+            //     let else_typed = self.infer_expr(*else_branch)?;
+            //     let else_type = else_typed.type_info.clone().into_type().unwrap();
+
+            //     self.subst = unify(&then_type, &else_type, &self.subst)?;
+            //     (
+            //         then_type,
+            //         TypedExprKind::If {
+            //             condition: Box::new(cond_typed),
+            //             then_branch: Box::new(then_typed),
+            //             else_branch: Box::new(else_typed),
+            //         },
+            //     )
+            // }
             TypedExprKind::If {
                 condition,
                 then_branch,
@@ -631,16 +678,19 @@ impl<'src> TypeInferencer {
                 let cond_typed = self.infer_expr(*condition)?;
                 let cond_type = cond_typed.type_info.clone().into_type().unwrap();
                 self.subst = unify(&cond_type, &Type::Bool, &self.subst)?;
-
                 let then_typed = self.infer_expr(*then_branch)?;
                 let then_type = then_typed.type_info.clone().into_type().unwrap();
-
                 let else_typed = self.infer_expr(*else_branch)?;
                 let else_type = else_typed.type_info.clone().into_type().unwrap();
-
-                self.subst = unify(&then_type, &else_type, &self.subst)?;
+                // Only unify if both branches are meant to return values; otherwise, treat as Unit
+                let if_type = if then_type != Type::Unit && else_type != Type::Unit {
+                    self.subst = unify(&then_type, &else_type, &self.subst)?;
+                    then_type
+                } else {
+                    Type::Unit
+                };
                 (
-                    then_type,
+                    if_type,
                     TypedExprKind::If {
                         condition: Box::new(cond_typed),
                         then_branch: Box::new(then_typed),
@@ -857,24 +907,79 @@ impl<'src> TypeInferencer {
         }
     }
 
+    // pub fn infer_program(
+    //     &mut self,
+    //     program: &[UntypedExpr<'src>],
+    // ) -> Result<Vec<TypedExpr<'src>>, Vec<TypeError>> {
+    //     let mut typed_ast = program
+    //         .iter()
+    //         .map(|expr| self.convert_to_typed_ast(expr))
+    //         .collect::<Vec<_>>();
+    //     let mut result_ast = Vec::new();
+    //     let mut errors = Vec::new();
+
+    //     for expr in typed_ast {
+    //         match self.infer_expr(expr) {
+    //             Ok(typed_expr) => result_ast.push(typed_expr),
+    //             Err(e) => errors.push(e),
+    //         }
+    //     }
+
+    //     if errors.is_empty() {
+    //         Ok(result_ast)
+    //     } else {
+    //         Err(errors)
+    //     }
+    // }
+
     pub fn infer_program(
         &mut self,
         program: &[UntypedExpr<'src>],
     ) -> Result<Vec<TypedExpr<'src>>, Vec<TypeError>> {
-        let mut typed_ast = program
-            .iter()
-            .map(|expr| self.convert_to_typed_ast(expr))
-            .collect::<Vec<_>>();
+        let mut typed_ast = self.convert_program(program);
+        // First pass: register function types
+        for expr in program {
+            if let UntypedExpr::Fn {
+                name,
+                params,
+                retty,
+                body: _,
+            } = expr
+            {
+                if let Value::Identifier(fn_name) = name {
+                    let param_types: Vec<Type> = params
+                        .iter()
+                        .map(|p| {
+                            if let Value::Identifier(ty_name) = &p.ty {
+                                self.type_from_annotation(ty_name).unwrap()
+                            } else {
+                                self.fresh_type_var()
+                            }
+                        })
+                        .collect();
+                    let ret_typed = self.convert_to_typed_ast(retty);
+                    let ret_type = self
+                        .infer_expr(ret_typed)
+                        .unwrap()
+                        .type_info
+                        .into_type()
+                        .unwrap();
+                    let fn_type = Type::Function(param_types, Box::new(ret_type));
+                    if let Some(decl_id) = self.resolution_map.get_declaration_id(fn_name) {
+                        self.env.insert(decl_id, fn_type);
+                    }
+                }
+            }
+        }
+        // Second pass: infer the rest
         let mut result_ast = Vec::new();
         let mut errors = Vec::new();
-
         for expr in typed_ast {
             match self.infer_expr(expr) {
                 Ok(typed_expr) => result_ast.push(typed_expr),
                 Err(e) => errors.push(e),
             }
         }
-
         if errors.is_empty() {
             Ok(result_ast)
         } else {
