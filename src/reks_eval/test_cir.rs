@@ -1490,6 +1490,116 @@ pub fn test_multiple_functions() {
 }
 
 pub fn test_many_functions() {
+    // let test_program = vec![
+    //     UntypedExpr::Fn {
+    //         name: Value::Identifier("double"),
+    //         params: vec![Param {
+    //             name: Value::Identifier("x"),
+    //             ty: Value::Identifier("i32"),
+    //         }],
+    //         retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+    //         body: Box::new(UntypedExpr::BinOp {
+    //             left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+    //             op: InfixOpKind::Add,
+    //             right: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+    //         }),
+    //     },
+    //     UntypedExpr::Fn {
+    //         name: Value::Identifier("triple"),
+    //         params: vec![Param {
+    //             name: Value::Identifier("x"),
+    //             ty: Value::Identifier("i32"),
+    //         }],
+    //         retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+    //         body: Box::new(UntypedExpr::If {
+    //             condition: Box::new(UntypedExpr::BinOp {
+    //                 left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+    //                 op: InfixOpKind::Greater,
+    //                 right: Box::new(UntypedExpr::Value(Value::Num(0))),
+    //             }),
+    //             then_branch: Box::new(UntypedExpr::BinOp {
+    //                 left: Box::new(UntypedExpr::Call {
+    //                     name: Box::new(UntypedExpr::Value(Value::Identifier("double"))),
+    //                     args: vec![UntypedExpr::Value(Value::Identifier("x"))],
+    //                 }),
+    //                 op: InfixOpKind::Add,
+    //                 right: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+    //             }),
+    //             else_branch: Box::new(UntypedExpr::Value(Value::Num(0))),
+    //         }),
+    //     },
+    //     UntypedExpr::Fn {
+    //         name: Value::Identifier("square"),
+    //         params: vec![Param {
+    //             name: Value::Identifier("x"),
+    //             ty: Value::Identifier("i32"),
+    //         }],
+    //         retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+    //         body: Box::new(UntypedExpr::If {
+    //             condition: Box::new(UntypedExpr::BinOp {
+    //                 left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+    //                 op: InfixOpKind::NotEq,
+    //                 right: Box::new(UntypedExpr::Value(Value::Num(0))),
+    //             }),
+    //             then_branch: Box::new(UntypedExpr::BinOp {
+    //                 left: Box::new(UntypedExpr::Call {
+    //                     name: Box::new(UntypedExpr::Value(Value::Identifier("triple"))),
+    //                     args: vec![UntypedExpr::Value(Value::Identifier("x"))],
+    //                 }),
+    //                 op: InfixOpKind::Sub,
+    //                 right: Box::new(UntypedExpr::Call {
+    //                     name: Box::new(UntypedExpr::Value(Value::Identifier("double"))),
+    //                     args: vec![UntypedExpr::Value(Value::Identifier("x"))],
+    //                 }),
+    //             }),
+    //             else_branch: Box::new(UntypedExpr::Value(Value::Num(0))),
+    //         }),
+    //     },
+    //     UntypedExpr::Fn {
+    //         name: Value::Identifier("compute"),
+    //         params: vec![Param {
+    //             name: Value::Identifier("n"),
+    //             ty: Value::Identifier("i32"),
+    //         }],
+    //         retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+    //         body: Box::new(UntypedExpr::If {
+    //             condition: Box::new(UntypedExpr::BinOp {
+    //                 left: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+    //                 op: InfixOpKind::Greater,
+    //                 right: Box::new(UntypedExpr::Value(Value::Num(2))),
+    //             }),
+    //             then_branch: Box::new(UntypedExpr::BinOp {
+    //                 left: Box::new(UntypedExpr::Call {
+    //                     name: Box::new(UntypedExpr::Value(Value::Identifier("square"))),
+    //                     args: vec![UntypedExpr::Value(Value::Identifier("n"))],
+    //                 }),
+    //                 op: InfixOpKind::Add,
+    //                 right: Box::new(UntypedExpr::Call {
+    //                     name: Box::new(UntypedExpr::Value(Value::Identifier("triple"))),
+    //                     args: vec![UntypedExpr::BinOp {
+    //                         left: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+    //                         op: InfixOpKind::Sub,
+    //                         right: Box::new(UntypedExpr::Value(Value::Num(1))),
+    //                     }],
+    //                 }),
+    //             }),
+    //             else_branch: Box::new(UntypedExpr::Call {
+    //                 name: Box::new(UntypedExpr::Value(Value::Identifier("double"))),
+    //                 args: vec![UntypedExpr::Value(Value::Identifier("n"))],
+    //             }),
+    //         }),
+    //     },
+    //     UntypedExpr::Fn {
+    //         name: Value::Identifier("main"),
+    //         params: vec![],
+    //         retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+    //         body: Box::new(UntypedExpr::Call {
+    //             name: Box::new(UntypedExpr::Value(Value::Identifier("compute"))),
+    //             args: vec![UntypedExpr::Value(Value::Num(2))],
+    //         }),
+    //     },
+    // ];
+
     let test_program = vec![
         UntypedExpr::Fn {
             name: Value::Identifier("double"),
@@ -1595,7 +1705,7 @@ pub fn test_many_functions() {
             retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
             body: Box::new(UntypedExpr::Call {
                 name: Box::new(UntypedExpr::Value(Value::Identifier("compute"))),
-                args: vec![UntypedExpr::Value(Value::Num(2))],
+                args: vec![UntypedExpr::Value(Value::Num(4))],
             }),
         },
     ];

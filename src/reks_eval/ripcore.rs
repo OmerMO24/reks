@@ -22,30 +22,6 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    // pub fn new(cir: CIR) -> Self {
-    //     // Precompute label map
-    //     let mut label_map = HashMap::new();
-    //     for block in &cir.blocks {
-    //         let mut block_labels = HashMap::new();
-    //         for (i, instr) in block.instructions.iter().enumerate() {
-    //             if let CIROp::Label(label) = &instr.op {
-    //                 block_labels.insert(label.clone(), i);
-    //             }
-    //         }
-    //         label_map.insert(block.id, block_labels);
-    //     }
-
-    //     Interpreter {
-    //         cir,
-    //         stack: Vec::new(),
-    //         temps: HashMap::new(),
-    //         call_stack: Vec::new(),
-    //         current_block: 0, // Start at main (assumed block 1, we’ll set it)
-    //         pc: 0,
-    //         label_map,
-    //     }
-    // }
-
     pub fn new(cir: CIR) -> Self {
         let mut label_map = HashMap::new();
         for block in &cir.blocks {
@@ -157,20 +133,6 @@ impl Interpreter {
                         .insert(instr.result.clone(), result);
                     self.pc += 1;
                 }
-                // CIROp::Mul(left_id, right_id) => {
-                //     let left = self.temps[&self.current_block][left_id].clone();
-                //     let right = self.temps[&self.current_block][right_id].clone();
-                //     let result = match (left, right) {
-                //         (CirValue::Int(l), CirValue::Int(r)) => CirValue::Int(l * r),
-                //         _ => panic!("Multiplication only supported for integers"), // Temporary panic
-                //     };
-                //     self.stack.push(result.clone());
-                //     self.temps
-                //         .get_mut(&self.current_block)
-                //         .unwrap()
-                //         .insert(instr.result.clone(), result);
-                //     self.pc += 1;
-                // }
                 CIROp::Mul(left_id, right_id) => {
                     let left = self.temps[&self.current_block][left_id].clone();
                     let right = self.temps[&self.current_block][right_id].clone();
@@ -244,45 +206,6 @@ impl Interpreter {
                         .insert(instr.result.clone(), result);
                     self.pc += 1;
                 }
-                // CIROp::Call(block_id, arg_ids) => {
-                //     let args: Vec<CirValue> = arg_ids
-                //         .iter()
-                //         .map(|id| self.temps[&self.current_block][id].clone())
-                //         .collect();
-
-                //     // Create a frame that saves the ENTIRE current environment
-                //     self.call_stack.push(CallFrame {
-                //         block_id: self.current_block,
-                //         return_pc: self.pc + 1,
-                //         return_slot: Some(instr.result.clone()),
-                //         // Save a complete copy of the current block's temps
-                //         temps: self.temps.get(&self.current_block).cloned(),
-                //     });
-
-                //     // Switch to the called function
-                //     self.current_block = *block_id;
-                //     self.pc = 0;
-
-                //     // Create a fresh environment for the called function
-                //     self.temps
-                //         .entry(self.current_block)
-                //         .or_insert_with(HashMap::new)
-                //         .clear();
-
-                //     // Set up parameters in the fresh environment
-                //     for (i, arg) in args.into_iter().enumerate() {
-                //         let param_id = ValueId(format!("param{}", i));
-                //         self.temps
-                //             .get_mut(&self.current_block)
-                //             .unwrap()
-                //             .insert(param_id, arg);
-                //     }
-
-                //     println!(
-                //         "Called block {}: Stack: {:?}",
-                //         self.current_block, self.call_stack
-                //     );
-                // }
                 CIROp::Call(block_id, arg_ids) => {
                     let args: Vec<CirValue> = arg_ids
                         .iter()
@@ -316,28 +239,6 @@ impl Interpreter {
                         .insert(target_id.clone(), value);
                     self.pc += 1;
                 }
-                // CIROp::Return(val_id) => {
-                //     let result = self.temps[&self.current_block][val_id].clone();
-                //     println!("Returning from block {}: {:?}", self.current_block, result);
-                //     if let Some(frame) = self.call_stack.pop() {
-                //         self.current_block = frame.block_id;
-                //         self.pc = frame.return_pc;
-                //         if let Some(slot) = frame.return_slot {
-                //             self.temps
-                //                 .get_mut(&self.current_block)
-                //                 .unwrap()
-                //                 .insert(slot, result.clone());
-                //             self.stack.push(result.clone());
-                //         }
-                //         println!(
-                //             "Returned to block {} at PC {}: Call Stack: {:?}",
-                //             self.current_block, self.pc, self.call_stack
-                //         );
-                //     } else {
-                //         println!("Top-level return: {:?}", result);
-                //         return Some(result);
-                //     }
-                // }
                 CIROp::Return(val_id) => {
                     let result = self.temps[&self.current_block][val_id].clone();
                     println!("Returning from block {}: {:?}", self.current_block, result);
