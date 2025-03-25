@@ -948,3 +948,77 @@ pub fn print_resolution_map_with_ids(map: &NameResolutionMap) {
         }
     }
 }
+
+pub fn test_name_resolution_loops() {
+    let test_program = vec![UntypedExpr::Fn {
+        name: Value::Identifier("test_loops"),
+        params: vec![],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![
+                UntypedExpr::Let {
+                    id: Value::Identifier("limit"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(3))),
+                    constness: Const::Yes,
+                },
+                UntypedExpr::Let {
+                    id: Value::Identifier("counter"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                    constness: Const::No,
+                },
+                UntypedExpr::While {
+                    guard: Box::new(UntypedExpr::BinOp {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("counter"))),
+                        op: InfixOpKind::Less,
+                        right: Box::new(UntypedExpr::Value(Value::Identifier("limit"))),
+                    }),
+                    body: Box::new(UntypedExpr::Assign {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("counter"))),
+                        right: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("counter"))),
+                            op: InfixOpKind::Add,
+                            right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        }),
+                    }),
+                },
+                UntypedExpr::Let {
+                    id: Value::Identifier("numbers"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::List {
+                        items: vec![
+                            UntypedExpr::Value(Value::Num(1)),
+                            UntypedExpr::Value(Value::Num(2)),
+                            UntypedExpr::Value(Value::Num(3)),
+                        ],
+                    }),
+                    constness: Const::Yes,
+                },
+                UntypedExpr::Let {
+                    id: Value::Identifier("sum"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                    constness: Const::No,
+                },
+                UntypedExpr::For {
+                    var: Value::Identifier("n"),
+                    iterable: Box::new(UntypedExpr::Value(Value::Identifier("numbers"))),
+                    body: Box::new(UntypedExpr::Assign {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("sum"))),
+                        right: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("sum"))),
+                            op: InfixOpKind::Add,
+                            right: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+                        }),
+                    }),
+                },
+                UntypedExpr::Value(Value::Identifier("sum")),
+            ],
+        }),
+    }];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    println!("Name Resolution Map: {:?}", resolution_map);
+}

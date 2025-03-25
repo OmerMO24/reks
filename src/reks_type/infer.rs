@@ -71,6 +71,15 @@ pub enum TypedExprKind<'src> {
         expr: Box<TypedExpr<'src>>,
         index: Box<TypedExpr<'src>>,
     },
+    While {
+        guard: Box<TypedExpr<'src>>,
+        body: Box<TypedExpr<'src>>,
+    },
+    For {
+        var: Value<'src>,
+        iterable: Box<TypedExpr<'src>>,
+        body: Box<TypedExpr<'src>>,
+    },
 }
 
 // Type Information
@@ -381,6 +390,19 @@ impl<'src> TypeInferencer {
                 expr: Box::new(self.convert_to_typed_ast(expr)),
                 index: Box::new(self.convert_to_typed_ast(index)),
             },
+            UntypedExpr::While { guard, body } => TypedExprKind::While {
+                guard: Box::new(self.convert_to_typed_ast(guard)),
+                body: Box::new(self.convert_to_typed_ast(body)),
+            },
+            UntypedExpr::For {
+                var,
+                iterable,
+                body,
+            } => TypedExprKind::For {
+                var: var.clone(),
+                iterable: Box::new(self.convert_to_typed_ast(iterable)),
+                body: Box::new(self.convert_to_typed_ast(body)),
+            },
             _ => todo!(),
         };
 
@@ -554,21 +576,6 @@ impl<'src> TypeInferencer {
                     },
                 )
             }
-            // TypedExprKind::Block { statements } => {
-            //     let mut block_type = Type::Unit;
-            //     let mut typed_statements = Vec::new();
-            //     for stmt in statements {
-            //         let stmt_typed = self.infer_expr(stmt)?;
-            //         block_type = stmt_typed.type_info.clone().into_type().unwrap();
-            //         typed_statements.push(stmt_typed);
-            //     }
-            //     (
-            //         block_type,
-            //         TypedExprKind::Block {
-            //             statements: typed_statements,
-            //         },
-            //     )
-            // }
             TypedExprKind::Block { statements } => {
                 let mut typed_statements = Vec::new();
                 for stmt in statements {
@@ -645,31 +652,6 @@ impl<'src> TypeInferencer {
                     },
                 )
             }
-            // TypedExprKind::If {
-            //     condition,
-            //     then_branch,
-            //     else_branch,
-            // } => {
-            //     let cond_typed = self.infer_expr(*condition)?;
-            //     let cond_type = cond_typed.type_info.clone().into_type().unwrap();
-            //     self.subst = unify(&cond_type, &Type::Bool, &self.subst)?;
-
-            //     let then_typed = self.infer_expr(*then_branch)?;
-            //     let then_type = then_typed.type_info.clone().into_type().unwrap();
-
-            //     let else_typed = self.infer_expr(*else_branch)?;
-            //     let else_type = else_typed.type_info.clone().into_type().unwrap();
-
-            //     self.subst = unify(&then_type, &else_type, &self.subst)?;
-            //     (
-            //         then_type,
-            //         TypedExprKind::If {
-            //             condition: Box::new(cond_typed),
-            //             then_branch: Box::new(then_typed),
-            //             else_branch: Box::new(else_typed),
-            //         },
-            //     )
-            // }
             TypedExprKind::If {
                 condition,
                 then_branch,
@@ -737,29 +719,108 @@ impl<'src> TypeInferencer {
                     },
                 )
             }
+            // TypedExprKind::Assign { target, expr } => {
+            //     let target_typed = self.infer_expr(*target)?;
+            //     let target_type = target_typed.type_info.clone().into_type().unwrap();
+
+            //     if let TypedExprKind::Value(Value::Identifier(name)) = &target_typed.kind {
+            //         if let Some(decl_id) = self.resolution_map.resolve_name(name) {
+            //             let is_mutable = *self.mutability.get(&decl_id).unwrap_or(&false);
+            //             if !is_mutable {
+            //                 return Err(TypeError::ImmutableAssignment(name.to_string()));
+            //             }
+            //         } else {
+            //             return Err(TypeError::UnknownVariable(name.to_string()));
+            //         }
+            //     } else {
+            //         return Err(TypeError::InvalidTypeAnnotation(
+            //             "Assignment target must be an identifier".to_string(),
+            //         ));
+            //     }
+
+            //     let expr_typed = self.infer_expr(*expr)?;
+            //     let expr_type = expr_typed.type_info.clone().into_type().unwrap();
+
+            //     self.subst = unify(&target_type, &expr_type, &self.subst)?;
+            //     (
+            //         Type::Unit,
+            //         TypedExprKind::Assign {
+            //             target: Box::new(target_typed),
+            //             expr: Box::new(expr_typed),
+            //         },
+            //     )
+            // }
             TypedExprKind::Assign { target, expr } => {
                 let target_typed = self.infer_expr(*target)?;
                 let target_type = target_typed.type_info.clone().into_type().unwrap();
 
-                if let TypedExprKind::Value(Value::Identifier(name)) = &target_typed.kind {
-                    if let Some(decl_id) = self.resolution_map.resolve_name(name) {
-                        let is_mutable = *self.mutability.get(&decl_id).unwrap_or(&false);
-                        if !is_mutable {
-                            return Err(TypeError::ImmutableAssignment(name.to_string()));
+                // Check if target is mutable and get its type
+                match &target_typed.kind {
+                    TypedExprKind::Value(Value::Identifier(name)) => {
+                        if let Some(decl_id) = self.resolution_map.resolve_name(name) {
+                            let is_mutable = *self.mutability.get(&decl_id).unwrap_or(&false);
+                            if !is_mutable {
+                                return Err(TypeError::ImmutableAssignment(name.to_string()));
+                            }
+                        } else {
+                            return Err(TypeError::UnknownVariable(name.to_string()));
                         }
-                    } else {
-                        return Err(TypeError::UnknownVariable(name.to_string()));
                     }
-                } else {
-                    return Err(TypeError::InvalidTypeAnnotation(
-                        "Assignment target must be an identifier".to_string(),
-                    ));
+                    TypedExprKind::Index { expr, index } => {
+                        let expr_type = expr.type_info.clone().into_type().unwrap();
+                        match expr_type {
+                            Type::List(elem_ty) => {
+                                // Ensure the list is mutable
+                                if let TypedExprKind::Value(Value::Identifier(name)) = &expr.kind {
+                                    if let Some(decl_id) = self.resolution_map.resolve_name(name) {
+                                        let is_mutable =
+                                            *self.mutability.get(&decl_id).unwrap_or(&false);
+                                        if !is_mutable {
+                                            return Err(TypeError::ImmutableAssignment(
+                                                name.to_string(),
+                                            ));
+                                        }
+                                    } else {
+                                        return Err(TypeError::UnknownVariable(name.to_string()));
+                                    }
+                                } else {
+                                    return Err(TypeError::InvalidTypeAnnotation(
+                                        "Index assignment target must be an identifier-based list"
+                                            .to_string(),
+                                    ));
+                                }
+                                // Ensure index is Int
+                                let index_typed = self.infer_expr(*index.clone())?;
+                                let index_type = index_typed.type_info.clone().into_type().unwrap();
+                                self.subst = unify(&index_type, &Type::Int, &self.subst)?;
+                                // Target type is the element type
+                                if target_type != *elem_ty {
+                                    return Err(TypeError::TypeMismatch {
+                                        expected: elem_ty.to_string(),
+                                        found: target_type.to_string(),
+                                    });
+                                }
+                            }
+                            _ => {
+                                return Err(TypeError::TypeMismatch {
+                                    expected: "list".to_string(),
+                                    found: expr_type.to_string(),
+                                })
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(TypeError::InvalidTypeAnnotation(
+                            "Assignment target must be an identifier or index".to_string(),
+                        ))
+                    }
                 }
 
                 let expr_typed = self.infer_expr(*expr)?;
                 let expr_type = expr_typed.type_info.clone().into_type().unwrap();
 
                 self.subst = unify(&target_type, &expr_type, &self.subst)?;
+
                 (
                     Type::Unit,
                     TypedExprKind::Assign {
@@ -883,6 +944,69 @@ impl<'src> TypeInferencer {
                     },
                 )
             }
+            TypedExprKind::While { guard, body } => {
+                // Infer the guard expression
+                let guard_typed = self.infer_expr(*guard)?;
+                let guard_type = guard_typed.type_info.clone().into_type().unwrap();
+                // Guard must be boolean
+                self.subst = unify(&guard_type, &Type::Bool, &self.subst)?;
+
+                // Infer the body (typically Unit unless we add break/return later)
+                let body_typed = self.infer_expr(*body)?;
+
+                // While loops return Unit as they’re statements
+                (
+                    Type::Unit,
+                    TypedExprKind::While {
+                        guard: Box::new(guard_typed),
+                        body: Box::new(body_typed),
+                    },
+                )
+            }
+            TypedExprKind::For {
+                var,
+                iterable,
+                body,
+            } => {
+                // Infer the iterable expression
+                let iterable_typed = self.infer_expr(*iterable)?;
+                let iterable_type = iterable_typed.type_info.clone().into_type().unwrap();
+
+                // Ensure iterable is a List and extract element type
+                let elem_type = match iterable_type {
+                    Type::List(elem_ty) => *elem_ty,
+                    _ => {
+                        return Err(TypeError::TypeMismatch {
+                            expected: "list".to_string(),
+                            found: iterable_type.to_string(),
+                        })
+                    }
+                };
+
+                // Declare the loop variable in the environment
+                if let Value::Identifier(var_name) = var {
+                    if let Some(decl_id) = self.resolution_map.get_declaration_id(var_name) {
+                        self.env.insert(decl_id, elem_type.clone());
+                        self.mutability.insert(decl_id, false); // Loop var is immutable
+                    } else {
+                        return Err(TypeError::UnknownVariable(var_name.to_string()));
+                    }
+                }
+
+                // Infer the body (typically Unit)
+                let body_typed = self.infer_expr(*body)?;
+
+                // For loops return Unit
+                (
+                    Type::Unit,
+                    TypedExprKind::For {
+                        var,
+                        iterable: Box::new(iterable_typed),
+                        body: Box::new(body_typed),
+                    },
+                )
+            }
+
             _ => todo!(),
         };
 

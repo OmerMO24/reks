@@ -108,4 +108,13 @@ pub enum UntypedExpr<'src> {
         expr: Box<Self>,
         index: Box<Self>,
     },
+    While {
+        guard: Box<Self>,
+        body: Box<Self>,
+    },
+    For {
+        var: Value<'src>,
+        iterable: Box<Self>,
+        body: Box<Self>,
+    },
 }

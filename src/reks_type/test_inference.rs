@@ -675,3 +675,298 @@ pub fn test_final_fuzz_program() {
 
     test_harness(&test_program);
 }
+
+pub fn test_inference_loops() {
+    let test_program = vec![UntypedExpr::Fn {
+        name: Value::Identifier("test_loops"),
+        params: vec![],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![
+                UntypedExpr::Let {
+                    id: Value::Identifier("limit"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(3))),
+                    constness: Const::Yes,
+                },
+                UntypedExpr::Let {
+                    id: Value::Identifier("counter"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                    constness: Const::No,
+                },
+                UntypedExpr::While {
+                    guard: Box::new(UntypedExpr::BinOp {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("counter"))),
+                        op: InfixOpKind::Less,
+                        right: Box::new(UntypedExpr::Value(Value::Identifier("limit"))),
+                    }),
+                    body: Box::new(UntypedExpr::Assign {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("counter"))),
+                        right: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("counter"))),
+                            op: InfixOpKind::Add,
+                            right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        }),
+                    }),
+                },
+                UntypedExpr::Let {
+                    id: Value::Identifier("numbers"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::List {
+                        items: vec![
+                            UntypedExpr::Value(Value::Num(1)),
+                            UntypedExpr::Value(Value::Num(2)),
+                            UntypedExpr::Value(Value::Num(3)),
+                        ],
+                    }),
+                    constness: Const::Yes,
+                },
+                UntypedExpr::Let {
+                    id: Value::Identifier("sum"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                    constness: Const::No,
+                },
+                UntypedExpr::For {
+                    var: Value::Identifier("n"),
+                    iterable: Box::new(UntypedExpr::Value(Value::Identifier("numbers"))),
+                    body: Box::new(UntypedExpr::Assign {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("sum"))),
+                        right: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("sum"))),
+                            op: InfixOpKind::Add,
+                            right: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+                        }),
+                    }),
+                },
+                UntypedExpr::Value(Value::Identifier("sum")),
+            ],
+        }),
+    }];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    println!("Name Resolution Map: {:?}", resolution_map);
+
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+    println!("Typed AST:");
+    for expr in &typed_ast {
+        println!("  {:?}", expr);
+    }
+}
+
+pub fn test_inference_complex_loops() {
+    let test_program = vec![
+        UntypedExpr::Fn {
+            name: Value::Identifier("factorial"),
+            params: vec![Param {
+                name: Value::Identifier("n"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("result"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("m"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+                        constness: Const::No, // Mutable local copy
+                    },
+                    UntypedExpr::While {
+                        guard: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("m"))),
+                            op: InfixOpKind::Greater,
+                            right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        }),
+                        body: Box::new(UntypedExpr::Block {
+                            statements: vec![
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("result"))),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier(
+                                            "result",
+                                        ))),
+                                        op: InfixOpKind::Mul,
+                                        right: Box::new(UntypedExpr::Value(Value::Identifier("m"))),
+                                    }),
+                                },
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("m"))),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier("m"))),
+                                        op: InfixOpKind::Sub,
+                                        right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                                    }),
+                                },
+                            ],
+                        }),
+                    },
+                    UntypedExpr::Value(Value::Identifier("result")),
+                ],
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("process_lists"),
+            params: vec![],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("numbers"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::List {
+                            items: vec![
+                                UntypedExpr::Value(Value::Num(2)),
+                                UntypedExpr::Value(Value::Num(3)),
+                                UntypedExpr::Value(Value::Num(4)),
+                            ],
+                        }),
+                        constness: Const::Yes,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("sums"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::List {
+                            items: vec![
+                                UntypedExpr::Value(Value::Num(0)),
+                                UntypedExpr::Value(Value::Num(0)),
+                                UntypedExpr::Value(Value::Num(0)),
+                            ],
+                        }),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("i"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::While {
+                        guard: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                            op: InfixOpKind::Less,
+                            right: Box::new(UntypedExpr::Value(Value::Num(3))),
+                        }),
+                        body: Box::new(UntypedExpr::Block {
+                            statements: vec![
+                                UntypedExpr::For {
+                                    var: Value::Identifier("x"),
+                                    iterable: Box::new(UntypedExpr::Value(Value::Identifier(
+                                        "numbers",
+                                    ))),
+                                    body: Box::new(UntypedExpr::If {
+                                        condition: Box::new(UntypedExpr::BinOp {
+                                            left: Box::new(UntypedExpr::Value(Value::Identifier(
+                                                "x",
+                                            ))),
+                                            op: InfixOpKind::Greater,
+                                            right: Box::new(UntypedExpr::Value(Value::Identifier(
+                                                "i",
+                                            ))),
+                                        }),
+                                        then_branch: Box::new(UntypedExpr::Assign {
+                                            left: Box::new(UntypedExpr::Index {
+                                                expr: Box::new(UntypedExpr::Value(
+                                                    Value::Identifier("sums"),
+                                                )),
+                                                index: Box::new(UntypedExpr::Value(
+                                                    Value::Identifier("i"),
+                                                )),
+                                            }),
+                                            right: Box::new(UntypedExpr::BinOp {
+                                                left: Box::new(UntypedExpr::Index {
+                                                    expr: Box::new(UntypedExpr::Value(
+                                                        Value::Identifier("sums"),
+                                                    )),
+                                                    index: Box::new(UntypedExpr::Value(
+                                                        Value::Identifier("i"),
+                                                    )),
+                                                }),
+                                                op: InfixOpKind::Add,
+                                                right: Box::new(UntypedExpr::Call {
+                                                    name: Box::new(UntypedExpr::Value(
+                                                        Value::Identifier("factorial"),
+                                                    )),
+                                                    args: vec![UntypedExpr::Value(
+                                                        Value::Identifier("x"),
+                                                    )],
+                                                }),
+                                            }),
+                                        }),
+                                        else_branch: Box::new(UntypedExpr::Block {
+                                            statements: vec![],
+                                        }),
+                                    }),
+                                },
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                        op: InfixOpKind::Add,
+                                        right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                                    }),
+                                },
+                            ],
+                        }),
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("total"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::For {
+                        var: Value::Identifier("s"),
+                        iterable: Box::new(UntypedExpr::Value(Value::Identifier("sums"))),
+                        body: Box::new(UntypedExpr::Assign {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("total"))),
+                            right: Box::new(UntypedExpr::BinOp {
+                                left: Box::new(UntypedExpr::Value(Value::Identifier("total"))),
+                                op: InfixOpKind::Add,
+                                right: Box::new(UntypedExpr::Value(Value::Identifier("s"))),
+                            }),
+                        }),
+                    },
+                    UntypedExpr::Value(Value::Identifier("total")),
+                ],
+            }),
+        },
+    ];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    println!("Name Resolution Map: {:?}", resolution_map);
+
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+    println!("Typed AST:");
+    for expr in &typed_ast {
+        println!("  {:?}", expr);
+    }
+}

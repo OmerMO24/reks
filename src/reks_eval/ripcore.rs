@@ -231,13 +231,60 @@ impl Interpreter {
                             .insert(param_id, arg);
                     }
                 }
+                // CIROp::Store(target_id, value_id) => {
+                //     let value = self.temps[&self.current_block][value_id].clone();
+                //     self.temps
+                //         .get_mut(&self.current_block)
+                //         .unwrap()
+                //         .insert(target_id.clone(), value);
+                //     self.pc += 1;
+                // }
                 CIROp::Store(target_id, value_id) => {
                     let value = self.temps[&self.current_block][value_id].clone();
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(target_id.clone(), value);
-                    self.pc += 1;
+                    let target = self.temps[&self.current_block][target_id].clone();
+                    match target {
+                        CirValue::List(mut elements) => {
+                            // If target was indexed, we need the index from prior Index op
+                            // For now, assume full list replacement (fix below)
+                            self.temps
+                                .get_mut(&self.current_block)
+                                .unwrap()
+                                .insert(target_id.clone(), value);
+                            self.pc += 1;
+                        }
+                        _ => {
+                            self.temps
+                                .get_mut(&self.current_block)
+                                .unwrap()
+                                .insert(target_id.clone(), value);
+                            self.pc += 1;
+                        }
+                    }
+                }
+                CIROp::StoreAt(list_id, index_id, value_id) => {
+                    let list = self.temps[&self.current_block][list_id].clone();
+                    let index = self.temps[&self.current_block][index_id].clone();
+                    let value = self.temps[&self.current_block][value_id].clone();
+                    match (list, index) {
+                        (CirValue::List(mut elements), CirValue::Int(i)) => {
+                            let idx = i as usize;
+                            if idx < elements.len() {
+                                elements[idx] = value;
+                                self.temps
+                                    .get_mut(&self.current_block)
+                                    .unwrap()
+                                    .insert(list_id.clone(), CirValue::List(elements));
+                                self.pc += 1;
+                            } else {
+                                panic!(
+                                    "Index {} out of bounds for list of length {}",
+                                    idx,
+                                    elements.len()
+                                );
+                            }
+                        }
+                        _ => panic!("StoreAt requires a list and integer index"),
+                    }
                 }
                 CIROp::Return(val_id) => {
                     let result = self.temps[&self.current_block][val_id].clone();
@@ -440,23 +487,63 @@ impl Interpreter {
                         .insert(instr.result.clone(), result);
                     self.pc += 1;
                 }
+                // CIROp::Index(list_id, index_id) => {
+                //     let list = self.temps[&self.current_block][list_id].clone();
+                //     let index = self.temps[&self.current_block][index_id].clone();
+                //     let result = match (list, index) {
+                //         (CirValue::List(elements), CirValue::Int(i)) => elements
+                //             .get(i as usize)
+                //             .cloned()
+                //             .expect("Index out of bounds"),
+                //         _ => panic!("Invalid list or index type"),
+                //     };
+                //     self.stack.push(result.clone());
+                //     self.temps
+                //         .get_mut(&self.current_block)
+                //         .unwrap()
+                //         .insert(instr.result.clone(), result);
+                //     self.pc += 1;
+                // }
                 CIROp::Index(list_id, index_id) => {
-                    let list = self.temps[&self.current_block][list_id].clone();
-                    let index = self.temps[&self.current_block][index_id].clone();
-                    let result = match (list, index) {
-                        (CirValue::List(elements), CirValue::Int(i)) => elements
-                            .get(i as usize)
-                            .cloned()
-                            .expect("Index out of bounds"),
-                        _ => panic!("Invalid list or index type"),
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
+                    let list_val = self.temps[&self.current_block][list_id].clone();
+                    let index_val = self.temps[&self.current_block][index_id].clone();
+                    if let (CirValue::List(elements), CirValue::Int(index)) = (list_val, index_val)
+                    {
+                        if index >= 0 && (index as usize) < elements.len() {
+                            let result = elements[index as usize].clone();
+                            self.temps
+                                .get_mut(&self.current_block)
+                                .unwrap()
+                                .insert(instr.result.clone(), result);
+                            self.pc += 1;
+                        } else {
+                            panic!(
+                                "Index out of bounds: {} for list of length {}",
+                                index,
+                                elements.len()
+                            );
+                        }
+                    } else {
+                        panic!("Invalid list or index type");
+                    }
                 }
+                CIROp::While {
+                    guard,
+                    body_start,
+                    exit_label,
+                } => {
+                    let guard_val = self.temps[&self.current_block][guard].clone();
+                    match guard_val {
+                        CirValue::Bool(true) => {
+                            self.pc = self.label_map[&self.current_block][body_start];
+                        }
+                        CirValue::Bool(false) => {
+                            self.pc = self.label_map[&self.current_block][exit_label];
+                        }
+                        _ => panic!("While guard must be boolean"),
+                    }
+                }
+                // ... oth
                 _ => unimplemented!("Instruction not yet supported"),
             }
         }

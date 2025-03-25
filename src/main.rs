@@ -4,7 +4,7 @@ mod reks_parse;
 mod reks_type;
 use chumsky::{input::Stream, prelude::*};
 use reks_eval::test_cir::*;
-use reks_type::test_inference::*;
+use reks_type::{test_inference::*, test_resolution::test_name_resolution_loops};
 
 // fn main() -> Result<(), Box<dyn Error>> {
 //let src = std::fs::read_to_string(std::env::args().nth(1).unwrap()).unwrap();
@@ -313,7 +313,12 @@ fn main() {
     // test_compute_four();
     // test_multiple_assignments();
     // test_struct_stuff();
-    //test_untyped_factorial();
+    // test_untyped_factorial();
     // test_multiple_functions();
-    test_many_functions();
+    // test_many_functions();
+    //test_name_resolution_loops();
+    //test_inference_loops();
+    // test_inference_complex_loops();
+    // test_while_loop();
+    test_function_calls_and_lists();
 }

@@ -467,6 +467,40 @@ impl NameResolver {
                 // Struct declarations are handled in the first pass of resolve_program
                 // Nothing to do here for name resolution
             }
+            UntypedExpr::While { guard, body } => {
+                // Resolve the guard expression (no new scope needed)
+                self.resolve_expr(guard);
+                // Enter a new scope for the body
+                self.enter_scope();
+                self.resolve_expr(body);
+                self.exit_scope();
+            }
+            UntypedExpr::For {
+                var,
+                iterable,
+                body,
+            } => {
+                // Resolve the iterable expression (outside the loop scope)
+                self.resolve_expr(iterable);
+                // Enter a new scope for the loop body
+                self.enter_scope();
+                // Declare the loop variable
+                if let Value::Identifier(var_name) = var {
+                    let decl_id = self.declare(
+                        var_name.to_string(),
+                        Symbol::Variable {
+                            name: var_name.to_string(),
+                            mutable: false,  // Loop vars are typically immutable
+                            type_info: None, // Type inferred later
+                        },
+                    );
+                    // Optionally bind the variable to its declaration (if needed for later phases)
+                    self.resolution_map.record_binding(node_id, decl_id);
+                }
+                // Resolve the body within the new scope
+                self.resolve_expr(body);
+                self.exit_scope();
+            }
         }
 
         node_id

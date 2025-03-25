@@ -1737,3 +1737,248 @@ pub fn test_many_functions() {
     let result = interp.run(); // Block 1 is main
     println!("Result: {:?}", result);
 }
+
+pub fn test_while_loop() {
+    let test_program = vec![UntypedExpr::Fn {
+        name: Value::Identifier("main"),
+        params: vec![],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![
+                UntypedExpr::Let {
+                    id: Value::Identifier("sum"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                    constness: Const::No, // mutable
+                },
+                UntypedExpr::Let {
+                    id: Value::Identifier("i"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                    constness: Const::No, // mutable
+                },
+                UntypedExpr::While {
+                    guard: Box::new(UntypedExpr::BinOp {
+                        left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                        op: InfixOpKind::Less,
+                        right: Box::new(UntypedExpr::Value(Value::Num(5))),
+                    }),
+                    body: Box::new(UntypedExpr::Block {
+                        statements: vec![
+                            UntypedExpr::Assign {
+                                left: Box::new(UntypedExpr::Value(Value::Identifier("sum"))),
+                                right: Box::new(UntypedExpr::BinOp {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("sum"))),
+                                    op: InfixOpKind::Add,
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                        op: InfixOpKind::Mul,
+                                        right: Box::new(UntypedExpr::Value(Value::Num(2))),
+                                    }),
+                                }),
+                            },
+                            UntypedExpr::Assign {
+                                left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                right: Box::new(UntypedExpr::BinOp {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                    op: InfixOpKind::Add,
+                                    right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                                }),
+                            },
+                        ],
+                    }),
+                },
+                UntypedExpr::Value(Value::Identifier("sum")),
+            ],
+        }),
+    }];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+
+    let mut builder = SSACIRBuilder::new();
+    let cir = builder.lower_program(&typed_ast);
+    println!("SSA CIR Blocks:");
+    for block in &cir.blocks {
+        println!("Block {}:", block.id);
+        for (i, instr) in block.instructions.iter().enumerate() {
+            println!("  {}: {} = {:?}", i, instr.result.0, instr.op);
+        }
+    }
+    let mut interp = Interpreter::new(cir);
+    let result = interp.run();
+    println!("Result: {:?}", result);
+}
+
+pub fn test_function_calls_and_lists() {
+    let test_program = vec![
+        UntypedExpr::Fn {
+            name: Value::Identifier("double"),
+            params: vec![Param {
+                name: Value::Identifier("x"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::BinOp {
+                left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                op: InfixOpKind::Mul,
+                right: Box::new(UntypedExpr::Value(Value::Num(2))),
+            }),
+        },
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    // mut list = [0, 0, 0, 0, 0]
+                    UntypedExpr::Let {
+                        id: Value::Identifier("list"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::List {
+                            items: vec![
+                                UntypedExpr::Value(Value::Num(0)),
+                                UntypedExpr::Value(Value::Num(0)),
+                                UntypedExpr::Value(Value::Num(0)),
+                                UntypedExpr::Value(Value::Num(0)),
+                                UntypedExpr::Value(Value::Num(0)),
+                            ],
+                        }),
+                        constness: Const::No,
+                    },
+                    // mut i = 0
+                    UntypedExpr::Let {
+                        id: Value::Identifier("i"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        constness: Const::No,
+                    },
+                    // while i < 5 { list[i] = double(i); i = i + 1; }
+                    UntypedExpr::While {
+                        guard: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                            op: InfixOpKind::Less,
+                            right: Box::new(UntypedExpr::Value(Value::Num(5))),
+                        }),
+                        body: Box::new(UntypedExpr::Block {
+                            statements: vec![
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Index {
+                                        expr: Box::new(UntypedExpr::Value(Value::Identifier(
+                                            "list",
+                                        ))),
+                                        index: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                    }),
+                                    right: Box::new(UntypedExpr::Call {
+                                        name: Box::new(UntypedExpr::Value(Value::Identifier(
+                                            "double",
+                                        ))),
+                                        args: vec![UntypedExpr::Value(Value::Identifier("i"))],
+                                    }),
+                                },
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                        op: InfixOpKind::Add,
+                                        right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                                    }),
+                                },
+                            ],
+                        }),
+                    },
+                    // mut sum = 0
+                    UntypedExpr::Let {
+                        id: Value::Identifier("sum"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        constness: Const::No,
+                    },
+                    // mut j = 0
+                    UntypedExpr::Let {
+                        id: Value::Identifier("j"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        constness: Const::No,
+                    },
+                    // while j < 5 { sum = sum + list[j]; j = j + 1; }
+                    UntypedExpr::While {
+                        guard: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("j"))),
+                            op: InfixOpKind::Less,
+                            right: Box::new(UntypedExpr::Value(Value::Num(5))),
+                        }),
+                        body: Box::new(UntypedExpr::Block {
+                            statements: vec![
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("sum"))),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier(
+                                            "sum",
+                                        ))),
+                                        op: InfixOpKind::Add,
+                                        right: Box::new(UntypedExpr::Index {
+                                            expr: Box::new(UntypedExpr::Value(Value::Identifier(
+                                                "list",
+                                            ))),
+                                            index: Box::new(UntypedExpr::Value(Value::Identifier(
+                                                "j",
+                                            ))),
+                                        }),
+                                    }),
+                                },
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("j"))),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier("j"))),
+                                        op: InfixOpKind::Add,
+                                        right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                                    }),
+                                },
+                            ],
+                        }),
+                    },
+                    UntypedExpr::Value(Value::Identifier("sum")),
+                ],
+            }),
+        },
+    ];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+
+    let mut builder = SSACIRBuilder::new();
+    let cir = builder.lower_program(&typed_ast);
+    println!("SSA CIR Blocks:");
+    for block in &cir.blocks {
+        println!("Block {}:", block.id);
+        for (i, instr) in block.instructions.iter().enumerate() {
+            println!("  {}: {} = {:?}", i, instr.result.0, instr.op);
+        }
+    }
+    let mut interp = Interpreter::new(cir);
+    let result = interp.run();
+    println!("Result: {:?}", result);
+}

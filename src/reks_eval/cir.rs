@@ -75,6 +75,19 @@ pub enum CIROp {
     Div(ValueId, ValueId),
     Exponent(ValueId, ValueId), // base ^ exp
     Modulo(ValueId, ValueId),
+    StoreAt(ValueId, ValueId, ValueId),
+    // New ops for loops
+    While {
+        guard: ValueId,     // Condition to check
+        body_start: String, // Label for loop body
+        exit_label: String, // Label for loop exit
+    },
+    For {
+        var: ValueId,       // Variable to bind each element
+        list: ValueId,      // List to iterate over
+        body_start: String, // Label for loop body
+        exit_label: String, // Label for loop exit
+    },
 }
 
 // SSA ValueId (temporary or parameter slot)
@@ -140,9 +153,27 @@ impl SSACIRBuilder {
         label
     }
 
+    // fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
+    //     let result = match op {
+    //         CIROp::Label(_) | CIROp::Branch(_, _, _) | CIROp::Return(_) => ValueId("".to_string()), // No result
+    //         _ => self.new_temp(block_id),
+    //     };
+    //     if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
+    //         block
+    //             .instructions
+    //             .push(CIRInstruction::new(op, result.clone()));
+    //     }
+    //     result
+    // }
+
     fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
         let result = match op {
-            CIROp::Label(_) | CIROp::Branch(_, _, _) | CIROp::Return(_) => ValueId("".to_string()), // No result
+            CIROp::Label(_)
+            | CIROp::Branch(_, _, _)
+            | CIROp::Jump(_)
+            | CIROp::Return(_)
+            | CIROp::Store(_, _)
+            | CIROp::StoreAt(_, _, _) => ValueId("".to_string()),
             _ => self.new_temp(block_id),
         };
         if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
@@ -235,6 +266,35 @@ impl SSACIRBuilder {
                     panic!("Call target must be an identifier");
                 }
             }
+            // TypedExprKind::If {
+            //     condition,
+            //     then_branch,
+            //     else_branch,
+            // } => {
+            //     let cond_id = self.lower_expr(condition, block_id);
+            //     let then_label = self.new_label();
+            //     let else_label = self.new_label();
+            //     let merge_label = self.new_label();
+            //     self.emit(
+            //         block_id,
+            //         CIROp::Branch(cond_id.clone(), then_label.clone(), else_label.clone()),
+            //     );
+            //     self.emit(block_id, CIROp::Label(then_label));
+            //     let then_id = self.lower_expr(then_branch, block_id);
+            //     self.emit(block_id, CIROp::Jump(merge_label.clone()));
+            //     self.emit(block_id, CIROp::Label(else_label));
+            //     let else_id = self.lower_expr(else_branch, block_id);
+            //     self.emit(block_id, CIROp::Label(merge_label));
+            //     // Only use Select if both branches return non-Unit values
+            //     if then_branch.type_info.clone().into_type() != Some(Type::Unit)
+            //         && else_branch.type_info.clone().into_type() != Some(Type::Unit)
+            //     {
+            //         let result = self.emit(block_id, CIROp::Select(cond_id, then_id, else_id));
+            //         result
+            //     } else {
+            //         ValueId("unit".to_string()) // No value to return, just control flow
+            //     }
+            // }
             TypedExprKind::If {
                 condition,
                 then_branch,
@@ -244,16 +304,34 @@ impl SSACIRBuilder {
                 let then_label = self.new_label();
                 let else_label = self.new_label();
                 let merge_label = self.new_label();
+
                 self.emit(
                     block_id,
                     CIROp::Branch(cond_id.clone(), then_label.clone(), else_label.clone()),
                 );
+
+                // Then branch
                 self.emit(block_id, CIROp::Label(then_label));
                 let then_id = self.lower_expr(then_branch, block_id);
                 self.emit(block_id, CIROp::Jump(merge_label.clone()));
+
+                // Else branch
                 self.emit(block_id, CIROp::Label(else_label));
-                let else_id = self.lower_expr(else_branch, block_id);
+                let else_id = if let TypedExprKind::Block { statements } = &else_branch.kind {
+                    if statements.is_empty() {
+                        // Emit a dummy Unit value for empty else block
+                        self.emit(block_id, CIROp::Const(CIRType::Unit, CirValue::Unit))
+                    } else {
+                        self.lower_expr(else_branch, block_id)
+                    }
+                } else {
+                    self.lower_expr(else_branch, block_id)
+                };
+                self.emit(block_id, CIROp::Jump(merge_label.clone()));
+
+                // Merge point
                 self.emit(block_id, CIROp::Label(merge_label));
+
                 // Only use Select if both branches return non-Unit values
                 if then_branch.type_info.clone().into_type() != Some(Type::Unit)
                     && else_branch.type_info.clone().into_type() != Some(Type::Unit)
@@ -264,7 +342,6 @@ impl SSACIRBuilder {
                     ValueId("unit".to_string()) // No value to return, just control flow
                 }
             }
-
             TypedExprKind::BinOp { left, op, right } => {
                 let left_id = self.lower_expr(left, block_id);
                 let right_id = self.lower_expr(right, block_id);
@@ -326,11 +403,42 @@ impl SSACIRBuilder {
                 };
                 self.emit(block_id, CIROp::List(element_ids))
             }
+            // TypedExprKind::Assign { target, expr } => {
+            //     let target_id = self.lower_expr(target, block_id);
+            //     let value_id = self.lower_expr(expr, block_id);
+            //     self.emit(block_id, CIROp::Store(target_id, value_id));
+            //     ValueId("unit".to_string()) // Return a dummy ID for Unit
+            // }
+            // TypedExprKind::Assign { target, expr } => {
+            //     let target_id = self.lower_expr(target, block_id);
+            //     let expr_id = self.lower_expr(expr, block_id);
+            //     match &target.kind {
+            //         TypedExprKind::Index { expr: base, .. } => {
+            //             if let TypedExprKind::Value(Value::Identifier(name)) = &base.kind {
+            //                 let list_id = self.param_map[*name].clone();
+            //                 self.emit(block_id, CIROp::Store(list_id, expr_id))
+            //             } else {
+            //                 panic!("Index target must be an identifier-based list");
+            //             }
+            //         }
+            //         _ => self.emit(block_id, CIROp::Store(target_id.clone(), expr_id)),
+            //     }
+            // }
             TypedExprKind::Assign { target, expr } => {
-                let target_id = self.lower_expr(target, block_id);
-                let value_id = self.lower_expr(expr, block_id);
-                self.emit(block_id, CIROp::Store(target_id, value_id));
-                ValueId("unit".to_string()) // Return a dummy ID for Unit
+                let expr_id = self.lower_expr(expr, block_id);
+                match &target.kind {
+                    TypedExprKind::Index { expr: base, index } => {
+                        let base_id = self.lower_expr(base, block_id);
+                        let index_id = self.lower_expr(index, block_id);
+                        self.emit(block_id, CIROp::StoreAt(base_id, index_id, expr_id));
+                        ValueId("unit".to_string())
+                    }
+                    _ => {
+                        let target_id = self.lower_expr(target, block_id);
+                        self.emit(block_id, CIROp::Store(target_id, expr_id));
+                        ValueId("unit".to_string())
+                    }
+                }
             }
             TypedExprKind::StructInit { id, fields } => {
                 let struct_name = if let Value::Identifier(name) = id {
@@ -360,6 +468,71 @@ impl SSACIRBuilder {
                 let list_id = self.lower_expr(expr, block_id);
                 let index_id = self.lower_expr(index, block_id);
                 self.emit(block_id, CIROp::Index(list_id, index_id))
+            }
+            TypedExprKind::While { guard, body } => {
+                let body_start = self.new_label();
+                let exit_label = self.new_label();
+                let loop_start = self.new_label();
+
+                // Loop header: compute guard each iteration
+                self.emit(block_id, CIROp::Label(loop_start.clone()));
+                let guard_id = self.lower_expr(guard, block_id); // Recompute guard
+                self.emit(
+                    block_id,
+                    CIROp::Branch(guard_id.clone(), body_start.clone(), exit_label.clone()),
+                );
+
+                // Body
+                self.emit(block_id, CIROp::Label(body_start));
+                let _ = self.lower_expr(body, block_id);
+                self.emit(block_id, CIROp::Jump(loop_start));
+
+                // Exit
+                self.emit(block_id, CIROp::Label(exit_label));
+
+                ValueId("unit".to_string())
+            }
+            TypedExprKind::For {
+                var,
+                iterable,
+                body,
+            } => {
+                let list_id = self.lower_expr(iterable, block_id);
+                let var_id = if let Value::Identifier(name) = var {
+                    let new_var_id = self.new_temp(block_id);
+                    self.param_map.insert(name.to_string(), new_var_id.clone());
+                    new_var_id
+                } else {
+                    self.new_temp(block_id)
+                };
+                let body_start = self.new_label();
+                let exit_label = self.new_label();
+
+                // Emit the For op to start iteration
+                self.emit(
+                    block_id,
+                    CIROp::For {
+                        var: var_id.clone(),
+                        list: list_id,
+                        body_start: body_start.clone(),
+                        exit_label: exit_label.clone(),
+                    },
+                );
+
+                // Body block
+                self.emit(block_id, CIROp::Label(body_start.clone()));
+                let _ = self.lower_expr(body, block_id); // Execute body
+                self.emit(block_id, CIROp::Jump(body_start)); // Loop back
+
+                // Exit block
+                self.emit(block_id, CIROp::Label(exit_label));
+
+                // Clean up param_map (optional, depending on scope handling)
+                if let Value::Identifier(name) = var {
+                    self.param_map.remove(*name);
+                }
+
+                ValueId("unit".to_string())
             }
             _ => unimplemented!("Other expressions not yet supported in SSA subset"),
         }
