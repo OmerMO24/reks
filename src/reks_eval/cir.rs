@@ -204,6 +204,18 @@ impl SSACIRBuilder {
                 }
                 _ => unimplemented!("Other Value types not yet supported"),
             },
+            // TypedExprKind::Let {
+            //     id,
+            //     pat,
+            //     expr,
+            //     constness,
+            // } => {
+            //     let value_id = self.lower_expr(expr, block_id);
+            //     if let Value::Identifier(name) = id {
+            //         self.param_map.insert(name.to_string(), value_id.clone());
+            //     }
+            //     value_id // Return the value_id of the expression (e.g., for let p = ...)
+            // }
             TypedExprKind::Let {
                 id,
                 pat,
@@ -212,9 +224,13 @@ impl SSACIRBuilder {
             } => {
                 let value_id = self.lower_expr(expr, block_id);
                 if let Value::Identifier(name) = id {
-                    self.param_map.insert(name.to_string(), value_id.clone());
+                    let target_id = ValueId(name.to_string()); // Use the variable name directly
+                    self.emit(block_id, CIROp::Store(target_id.clone(), value_id));
+                    self.param_map.insert(name.to_string(), target_id.clone());
+                    target_id
+                } else {
+                    value_id
                 }
-                value_id // Return the value_id of the expression (e.g., for let p = ...)
             }
             TypedExprKind::Fn {
                 name,

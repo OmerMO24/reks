@@ -1982,3 +1982,77 @@ pub fn test_function_calls_and_lists() {
     let result = interp.run();
     println!("Result: {:?}", result);
 }
+
+pub fn test_array_mutation() {
+    let test_program = vec![UntypedExpr::Fn {
+        name: Value::Identifier("main"),
+        params: vec![],
+        retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+        body: Box::new(UntypedExpr::Block {
+            statements: vec![
+                // let x = [1, 2, 3, 4];
+                UntypedExpr::Let {
+                    id: Value::Identifier("x"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::List {
+                        items: vec![
+                            UntypedExpr::Value(Value::Num(1)),
+                            UntypedExpr::Value(Value::Num(2)),
+                            UntypedExpr::Value(Value::Num(3)),
+                            UntypedExpr::Value(Value::Num(4)),
+                        ],
+                    }),
+                    constness: Const::Yes, // Const for compile-time
+                },
+                // let y = x;
+                UntypedExpr::Let {
+                    id: Value::Identifier("y"),
+                    pat: TypePath::Empty,
+                    expr: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                    constness: Const::No, // Mutable for mutation
+                },
+                // y[0] = 5;
+                UntypedExpr::Assign {
+                    left: Box::new(UntypedExpr::Index {
+                        expr: Box::new(UntypedExpr::Value(Value::Identifier("y"))),
+                        index: Box::new(UntypedExpr::Value(Value::Num(0))),
+                    }),
+                    right: Box::new(UntypedExpr::Value(Value::Num(5))),
+                },
+                // return y[0];
+                UntypedExpr::Index {
+                    expr: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                    index: Box::new(UntypedExpr::Value(Value::Num(0))),
+                },
+            ],
+        }),
+    }];
+
+    let mut resolver = NameResolver::new();
+    let resolution_map = resolver.resolve_program(&test_program);
+    let mut inferencer = TypeInferencer::new(resolution_map.clone());
+    let typed_ast = match inferencer.infer_program(&test_program) {
+        Ok(ast) => ast,
+        Err(errors) => {
+            println!("Inference errors:");
+            for err in errors {
+                println!("  {:?}", err);
+            }
+            return;
+        }
+    };
+
+    let mut builder = SSACIRBuilder::new();
+    let cir = builder.lower_program(&typed_ast);
+    println!("SSA CIR Blocks:");
+    for block in &cir.blocks {
+        println!("Block {}:", block.id);
+        for (i, instr) in block.instructions.iter().enumerate() {
+            println!("  {}: {} = {:?}", i, instr.result.0, instr.op);
+        }
+    }
+
+    let mut interp = Interpreter::new(cir);
+    let result = interp.run();
+    println!("Result: {:?}", result);
+}

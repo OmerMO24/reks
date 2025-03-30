@@ -3,6 +3,7 @@ mod reks_eval;
 mod reks_parse;
 mod reks_type;
 use chumsky::{input::Stream, prelude::*};
+use reks_compile::{compile::*, test_compile::*};
 use reks_eval::test_cir::*;
 use reks_type::{test_inference::*, test_resolution::test_name_resolution_loops};
 
@@ -320,5 +321,11 @@ fn main() {
     //test_inference_loops();
     // test_inference_complex_loops();
     // test_while_loop();
-    test_function_calls_and_lists();
+    // test_function_calls_and_lists();
+    //test_array_mutation();
+    // test_llvm_codegen_no_consteval();
+    // test_llvm_codegen_with_param();
+    // test_better_llvm_codegen_with_param();
+    // test_llvm_branching();
+    test_llvm_branching_stress();
 }
