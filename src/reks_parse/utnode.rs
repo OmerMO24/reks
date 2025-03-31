@@ -1,10 +1,10 @@
 use super::operators::{InfixOpKind, PrefixOpKind};
 
-#[derive(Debug, Clone)]
-pub enum RetTy<'src> {
-    None,
-    Ty(Value<'src>),
-}
+// #[derive(Debug, Clone)]
+// pub enum RetTy<'src> {
+//     None,
+//     Ty(Value<'src>),
+// }
 
 // Values
 

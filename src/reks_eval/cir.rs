@@ -153,19 +153,7 @@ impl SSACIRBuilder {
         label
     }
 
-    // fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
-    //     let result = match op {
-    //         CIROp::Label(_) | CIROp::Branch(_, _, _) | CIROp::Return(_) => ValueId("".to_string()), // No result
-    //         _ => self.new_temp(block_id),
-    //     };
-    //     if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
-    //         block
-    //             .instructions
-    //             .push(CIRInstruction::new(op, result.clone()));
-    //     }
-    //     result
-    // }
-
+    
     fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
         let result = match op {
             CIROp::Label(_)
@@ -282,35 +270,6 @@ impl SSACIRBuilder {
                     panic!("Call target must be an identifier");
                 }
             }
-            // TypedExprKind::If {
-            //     condition,
-            //     then_branch,
-            //     else_branch,
-            // } => {
-            //     let cond_id = self.lower_expr(condition, block_id);
-            //     let then_label = self.new_label();
-            //     let else_label = self.new_label();
-            //     let merge_label = self.new_label();
-            //     self.emit(
-            //         block_id,
-            //         CIROp::Branch(cond_id.clone(), then_label.clone(), else_label.clone()),
-            //     );
-            //     self.emit(block_id, CIROp::Label(then_label));
-            //     let then_id = self.lower_expr(then_branch, block_id);
-            //     self.emit(block_id, CIROp::Jump(merge_label.clone()));
-            //     self.emit(block_id, CIROp::Label(else_label));
-            //     let else_id = self.lower_expr(else_branch, block_id);
-            //     self.emit(block_id, CIROp::Label(merge_label));
-            //     // Only use Select if both branches return non-Unit values
-            //     if then_branch.type_info.clone().into_type() != Some(Type::Unit)
-            //         && else_branch.type_info.clone().into_type() != Some(Type::Unit)
-            //     {
-            //         let result = self.emit(block_id, CIROp::Select(cond_id, then_id, else_id));
-            //         result
-            //     } else {
-            //         ValueId("unit".to_string()) // No value to return, just control flow
-            //     }
-            // }
             TypedExprKind::If {
                 condition,
                 then_branch,
@@ -419,27 +378,6 @@ impl SSACIRBuilder {
                 };
                 self.emit(block_id, CIROp::List(element_ids))
             }
-            // TypedExprKind::Assign { target, expr } => {
-            //     let target_id = self.lower_expr(target, block_id);
-            //     let value_id = self.lower_expr(expr, block_id);
-            //     self.emit(block_id, CIROp::Store(target_id, value_id));
-            //     ValueId("unit".to_string()) // Return a dummy ID for Unit
-            // }
-            // TypedExprKind::Assign { target, expr } => {
-            //     let target_id = self.lower_expr(target, block_id);
-            //     let expr_id = self.lower_expr(expr, block_id);
-            //     match &target.kind {
-            //         TypedExprKind::Index { expr: base, .. } => {
-            //             if let TypedExprKind::Value(Value::Identifier(name)) = &base.kind {
-            //                 let list_id = self.param_map[*name].clone();
-            //                 self.emit(block_id, CIROp::Store(list_id, expr_id))
-            //             } else {
-            //                 panic!("Index target must be an identifier-based list");
-            //             }
-            //         }
-            //         _ => self.emit(block_id, CIROp::Store(target_id.clone(), expr_id)),
-            //     }
-            // }
             TypedExprKind::Assign { target, expr } => {
                 let expr_id = self.lower_expr(expr, block_id);
                 match &target.kind {

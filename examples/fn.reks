@@ -1,1 +1,6 @@
-mask.lower_mask = boom() + doom; 
+if (boom > boomster) {
+	const x: i32 = 5;
+	x = 55; 
+} else {
+	the_boomster;
+}

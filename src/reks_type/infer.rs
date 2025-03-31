@@ -719,37 +719,6 @@ impl<'src> TypeInferencer {
                     },
                 )
             }
-            // TypedExprKind::Assign { target, expr } => {
-            //     let target_typed = self.infer_expr(*target)?;
-            //     let target_type = target_typed.type_info.clone().into_type().unwrap();
-
-            //     if let TypedExprKind::Value(Value::Identifier(name)) = &target_typed.kind {
-            //         if let Some(decl_id) = self.resolution_map.resolve_name(name) {
-            //             let is_mutable = *self.mutability.get(&decl_id).unwrap_or(&false);
-            //             if !is_mutable {
-            //                 return Err(TypeError::ImmutableAssignment(name.to_string()));
-            //             }
-            //         } else {
-            //             return Err(TypeError::UnknownVariable(name.to_string()));
-            //         }
-            //     } else {
-            //         return Err(TypeError::InvalidTypeAnnotation(
-            //             "Assignment target must be an identifier".to_string(),
-            //         ));
-            //     }
-
-            //     let expr_typed = self.infer_expr(*expr)?;
-            //     let expr_type = expr_typed.type_info.clone().into_type().unwrap();
-
-            //     self.subst = unify(&target_type, &expr_type, &self.subst)?;
-            //     (
-            //         Type::Unit,
-            //         TypedExprKind::Assign {
-            //             target: Box::new(target_typed),
-            //             expr: Box::new(expr_typed),
-            //         },
-            //     )
-            // }
             TypedExprKind::Assign { target, expr } => {
                 let target_typed = self.infer_expr(*target)?;
                 let target_type = target_typed.type_info.clone().into_type().unwrap();
@@ -1030,31 +999,6 @@ impl<'src> TypeInferencer {
             _ => Err(TypeError::InvalidTypeAnnotation(type_name.to_string())),
         }
     }
-
-    // pub fn infer_program(
-    //     &mut self,
-    //     program: &[UntypedExpr<'src>],
-    // ) -> Result<Vec<TypedExpr<'src>>, Vec<TypeError>> {
-    //     let mut typed_ast = program
-    //         .iter()
-    //         .map(|expr| self.convert_to_typed_ast(expr))
-    //         .collect::<Vec<_>>();
-    //     let mut result_ast = Vec::new();
-    //     let mut errors = Vec::new();
-
-    //     for expr in typed_ast {
-    //         match self.infer_expr(expr) {
-    //             Ok(typed_expr) => result_ast.push(typed_expr),
-    //             Err(e) => errors.push(e),
-    //         }
-    //     }
-
-    //     if errors.is_empty() {
-    //         Ok(result_ast)
-    //     } else {
-    //         Err(errors)
-    //     }
-    // }
 
     pub fn infer_program(
         &mut self,

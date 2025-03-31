@@ -42,7 +42,6 @@ where
             .then(path)
             .then_ignore(just(Token::TOKEN_ASSIGN))
             .then(expr.clone())
-            //.then_ignore(just(Token::TOKEN_SEMICOLON))
             .map(
                 |(((constness, name), annotation), value)| utnode::UntypedExpr::Let {
                     id: name,
