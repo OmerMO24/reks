@@ -231,36 +231,36 @@ impl Interpreter {
                             .insert(param_id, arg);
                     }
                 }
-                // CIROp::Store(target_id, value_id) => {
-                //     let value = self.temps[&self.current_block][value_id].clone();
-                //     self.temps
-                //         .get_mut(&self.current_block)
-                //         .unwrap()
-                //         .insert(target_id.clone(), value);
-                //     self.pc += 1;
-                // }
                 CIROp::Store(target_id, value_id) => {
                     let value = self.temps[&self.current_block][value_id].clone();
-                    let target = self.temps[&self.current_block][target_id].clone();
-                    match target {
-                        CirValue::List(mut elements) => {
-                            // If target was indexed, we need the index from prior Index op
-                            // For now, assume full list replacement (fix below)
-                            self.temps
-                                .get_mut(&self.current_block)
-                                .unwrap()
-                                .insert(target_id.clone(), value);
-                            self.pc += 1;
-                        }
-                        _ => {
-                            self.temps
-                                .get_mut(&self.current_block)
-                                .unwrap()
-                                .insert(target_id.clone(), value);
-                            self.pc += 1;
-                        }
-                    }
+                    self.temps
+                        .get_mut(&self.current_block)
+                        .unwrap()
+                        .insert(target_id.clone(), value);
+                    self.pc += 1;
                 }
+                // CIROp::Store(target_id, value_id) => {
+                //     let value = self.temps[&self.current_block][value_id].clone();
+                //     let target = self.temps[&self.current_block][target_id].clone();
+                //     match target {
+                //         CirValue::List(mut elements) => {
+                //             // If target was indexed, we need the index from prior Index op
+                //             // For now, assume full list replacement (fix below)
+                //             self.temps
+                //                 .get_mut(&self.current_block)
+                //                 .unwrap()
+                //                 .insert(target_id.clone(), value);
+                //             self.pc += 1;
+                //         }
+                //         _ => {
+                //             self.temps
+                //                 .get_mut(&self.current_block)
+                //                 .unwrap()
+                //                 .insert(target_id.clone(), value);
+                //             self.pc += 1;
+                //         }
+                //     }
+                // }
                 CIROp::StoreAt(list_id, index_id, value_id) => {
                     let list = self.temps[&self.current_block][list_id].clone();
                     let index = self.temps[&self.current_block][index_id].clone();

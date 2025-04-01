@@ -207,3 +207,146 @@ pub fn test_llvm_branching_stress() {
 
     compile(test_program);
 }
+
+pub fn test_llvm_function_calls() {
+    let test_program = vec![
+        // fn add_two(x: i32) -> i32 { x + 2 }
+        UntypedExpr::Fn {
+            name: Value::Identifier("add_two"),
+            params: vec![Param {
+                name: Value::Identifier("x"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::BinOp {
+                left: Box::new(UntypedExpr::Value(Value::Identifier("x"))),
+                op: InfixOpKind::Add,
+                right: Box::new(UntypedExpr::Value(Value::Num(2))),
+            }),
+        },
+        // fn main(a: i32) -> i32 { let y = add_two(a); y }
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![Param {
+                name: Value::Identifier("a"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("y"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Call {
+                            name: Box::new(UntypedExpr::Value(Value::Identifier("add_two"))),
+                            args: vec![UntypedExpr::Value(Value::Identifier("a"))],
+                        }),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::Value(Value::Identifier("y")),
+                ],
+            }),
+        },
+    ];
+
+    compile(test_program);
+}
+
+pub fn test_llvm_branching_new() {
+    let test_program = vec![
+        // fn max(a: i32, b: i32) -> i32 { if a > b { a } else { b } }
+        UntypedExpr::Fn {
+            name: Value::Identifier("max"),
+            params: vec![
+                Param {
+                    name: Value::Identifier("a"),
+                    ty: Value::Identifier("i32"),
+                },
+                Param {
+                    name: Value::Identifier("b"),
+                    ty: Value::Identifier("i32"),
+                },
+            ],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::If {
+                condition: Box::new(UntypedExpr::BinOp {
+                    left: Box::new(UntypedExpr::Value(Value::Identifier("a"))),
+                    op: InfixOpKind::Greater,
+                    right: Box::new(UntypedExpr::Value(Value::Identifier("b"))),
+                }),
+                then_branch: Box::new(UntypedExpr::Value(Value::Identifier("a"))),
+                else_branch: Box::new(UntypedExpr::Value(Value::Identifier("b"))),
+            }),
+        },
+        // fn main(x: i32) -> i32 { let y = max(x, 42); y }
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![Param {
+                name: Value::Identifier("x"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("y"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Call {
+                            name: Box::new(UntypedExpr::Value(Value::Identifier("max"))),
+                            args: vec![
+                                UntypedExpr::Value(Value::Identifier("x")),
+                                UntypedExpr::Value(Value::Num(42)),
+                            ],
+                        }),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::Value(Value::Identifier("y")),
+                ],
+            }),
+        },
+    ];
+
+    compile(test_program);
+}
+
+pub fn test_llvm_arrays() {
+    let test_program = vec![
+        // fn main(x: i32) -> i32 { let arr = [x, 42]; arr[0] + arr[1] }
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![Param {
+                name: Value::Identifier("x"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("arr"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::List {
+                            items: vec![
+                                UntypedExpr::Value(Value::Identifier("x")),
+                                UntypedExpr::Value(Value::Num(42)),
+                            ],
+                        }),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::BinOp {
+                        left: Box::new(UntypedExpr::Index {
+                            expr: Box::new(UntypedExpr::Value(Value::Identifier("arr"))),
+                            index: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        }),
+                        op: InfixOpKind::Add,
+                        right: Box::new(UntypedExpr::Index {
+                            expr: Box::new(UntypedExpr::Value(Value::Identifier("arr"))),
+                            index: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        }),
+                    },
+                ],
+            }),
+        },
+    ];
+
+    compile(test_program);
+}

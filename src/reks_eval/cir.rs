@@ -140,12 +140,12 @@ impl SSACIRBuilder {
         }
     }
 
-    fn new_temp(&mut self, block_id: usize) -> ValueId {
-        let counter = self.block_temp_counters.entry(block_id).or_insert(0);
-        let temp = format!("%{}", *counter);
-        *counter += 1;
-        ValueId(temp)
-    }
+    // fn new_temp(&mut self, block_id: usize) -> ValueId {
+    //     let counter = self.block_temp_counters.entry(block_id).or_insert(0);
+    //     let temp = format!("%{}", *counter);
+    //     *counter += 1;
+    //     ValueId(temp)
+    // }
 
     fn new_label(&mut self) -> String {
         let label = format!("L{}", self.label_counter);
@@ -153,18 +153,438 @@ impl SSACIRBuilder {
         label
     }
 
-    
+    // fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
+    //     let result = match op {
+    //         CIROp::Label(_)
+    //         | CIROp::Branch(_, _, _)
+    //         | CIROp::Jump(_)
+    //         | CIROp::Return(_)
+    //         | CIROp::Store(_, _)
+    //         | CIROp::StoreAt(_, _, _) => ValueId("".to_string()),
+    //         _ => self.new_temp(block_id),
+    //     };
+    //     if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
+    //         block
+    //             .instructions
+    //             .push(CIRInstruction::new(op, result.clone()));
+    //     }
+    //     result
+    // }
+
+    // fn lower_expr(&mut self, expr: &TypedExpr, block_id: usize) -> ValueId {
+    //     match &expr.kind {
+    //         TypedExprKind::Value(val) => match val {
+    //             Value::Num(n) => {
+    //                 let ty = CIRType::from(expr.type_info.as_type().unwrap());
+    //                 self.emit(
+    //                     block_id,
+    //                     CIROp::Const(ty, CirValue::Int((*n).try_into().unwrap())),
+    //                 )
+    //             }
+    //             Value::Identifier(name) => {
+    //                 println!("Looking up '{}' in param_map: {:?}", name, self.param_map);
+    //                 if let Some(param_id) = self.param_map.get(*name) {
+    //                     param_id.clone()
+    //                 } else {
+    //                     panic!("Unresolved identifier: {}", name);
+    //                 }
+    //             }
+    //             _ => unimplemented!("Other Value types not yet supported"),
+    //         },
+    //         // TypedExprKind::Let {
+    //         //     id,
+    //         //     pat,
+    //         //     expr,
+    //         //     constness,
+    //         // } => {
+    //         //     let value_id = self.lower_expr(expr, block_id);
+    //         //     if let Value::Identifier(name) = id {
+    //         //         self.param_map.insert(name.to_string(), value_id.clone());
+    //         //     }
+    //         //     value_id // Return the value_id of the expression (e.g., for let p = ...)
+    //         // }
+    //         // typedexprkind::let {
+    //         //     id,
+    //         //     pat,
+    //         //     expr,
+    //         //     constness,
+    //         // } => {
+    //         //     let value_id = self.lower_expr(expr, block_id);
+    //         //     if let value::identifier(name) = id {
+    //         //         let target_id = valueid(name.to_string()); // use the variable name directly
+    //         //         self.emit(block_id, cirop::store(target_id.clone(), value_id));
+    //         //         self.param_map.insert(name.to_string(), target_id.clone());
+    //         //         target_id
+    //         //     } else {
+    //         //         value_id
+    //         //     }
+    //         // }
+    //         TypedExprKind::Fn {
+    //             name,
+    //             params,
+    //             retty,
+    //             body,
+    //         } => {
+    //             if let Value::Identifier(fn_name) = name {
+    //                 let block_id = self.blocks.len();
+    //                 self.function_map.insert(fn_name.to_string(), block_id);
+    //                 self.blocks.push(CIRBlock {
+    //                     id: block_id,
+    //                     instructions: Vec::new(),
+    //                 });
+    //                 self.block_temp_counters.insert(block_id, 0);
+    //                 self.param_map.clear();
+    //                 println!("Params for {}: {:?}", fn_name, params);
+    //                 for (i, param) in params.iter().enumerate() {
+    //                     if let Value::Identifier(param_name) = &param.name {
+    //                         let param_id = ValueId(format!("param{}", i));
+    //                         self.param_map
+    //                             .insert(param_name.to_string(), param_id.clone());
+    //                         println!("Inserted '{}': {:?}", param_name, param_id);
+    //                     }
+    //                 }
+    //                 println!("param_map after insertion: {:?}", self.param_map);
+    //                 let body_id = self.lower_expr(body, block_id);
+    //                 self.emit(block_id, CIROp::Return(body_id));
+    //                 ValueId(format!("block{}", block_id))
+    //             } else {
+    //                 panic!("Function name must be an identifier");
+    //             }
+    //         }
+    //         // TypedExprKind::Call { name, args } => {
+    //         //     let mut arg_ids = Vec::new();
+    //         //     for arg in args {
+    //         //         arg_ids.push(self.lower_expr(arg, block_id));
+    //         //     }
+    //         //     if let TypedExprKind::Value(Value::Identifier(fn_name)) = &name.kind {
+    //         //         println!("the function map: {:?}", self.function_map);
+    //         //         println!("The function's name is: {:?}", fn_name);
+    //         //         let fn_block_id = *self
+    //         //             .function_map
+    //         //             .get(fn_name.clone())
+    //         //             .expect("Function not found");
+    //         //         let ty = CIRType::from(expr.type_info.as_type().unwrap());
+    //         //         self.emit(block_id, CIROp::Call(fn_block_id, arg_ids))
+    //         //     } else {
+    //         //         panic!("Call target must be an identifier");
+    //         //     }
+    //         // }
+    //         // TypedExprKind::Call { name, args } => {
+    //         //     let mut arg_ids = Vec::new();
+    //         //     for arg in args {
+    //         //         arg_ids.push(self.lower_expr(arg, block_id));
+    //         //     }
+    //         //     if let TypedExprKind::Value(Value::Identifier(fn_name)) = &name.kind {
+    //         //         let fn_block_id = *self.function_map.get(*fn_name).expect("Function not found");
+    //         //         let adjusted_arg_ids: Vec<ValueId> = arg_ids
+    //         //             .iter()
+    //         //             .enumerate()
+    //         //             .map(|(i, _)| ValueId(format!("param{}", i + fn_block_id * 10)))
+    //         //             .collect();
+    //         //         for (i, arg_id) in arg_ids.iter().enumerate() {
+    //         //             self.emit(
+    //         //                 block_id,
+    //         //                 CIROp::Store(adjusted_arg_ids[i].clone(), arg_id.clone()),
+    //         //             );
+    //         //         }
+    //         //         let call_result_id = self.new_temp(block_id); // e.g., %0
+    //         //         self.emit(block_id, CIROp::Call(fn_block_id, adjusted_arg_ids));
+    //         //         call_result_id // Return %0
+    //         //     } else {
+    //         //         panic!("Call target must be an identifier");
+    //         //     }
+    //         // }
+    //         TypedExprKind::Call { name, args } => {
+    //             let mut arg_ids = Vec::new();
+    //             for arg in args {
+    //                 arg_ids.push(self.lower_expr(arg, block_id));
+    //             }
+    //             if let TypedExprKind::Value(Value::Identifier(fn_name)) = &name.kind {
+    //                 let fn_block_id = *self.function_map.get(*fn_name).expect("Function not found");
+    //                 let adjusted_arg_ids: Vec<ValueId> = arg_ids
+    //                     .iter()
+    //                     .enumerate()
+    //                     .map(|(i, _)| ValueId(format!("param{}", i + fn_block_id * 10)))
+    //                     .collect();
+    //                 for (i, arg_id) in arg_ids.iter().enumerate() {
+    //                     self.emit(
+    //                         block_id,
+    //                         CIROp::Store(adjusted_arg_ids[i].clone(), arg_id.clone()),
+    //                     );
+    //                 }
+    //                 let call_result_id = self.new_temp(block_id); // e.g., %0
+    //                 self.emit(block_id, CIROp::Call(fn_block_id, adjusted_arg_ids));
+    //                 call_result_id // Return %0
+    //             } else {
+    //                 panic!("Call target must be an identifier");
+    //             }
+    //         }
+    //         TypedExprKind::Let {
+    //             id,
+    //             pat,
+    //             expr,
+    //             constness,
+    //         } => {
+    //             let value_id = self.lower_expr(expr, block_id); // e.g., %0 from Call
+    //             if let Value::Identifier(name) = id {
+    //                 let target_id = ValueId(name.to_string());
+    //                 self.emit(block_id, CIROp::Store(target_id.clone(), value_id.clone()));
+    //                 self.param_map.insert(name.to_string(), target_id.clone());
+    //                 target_id
+    //             } else {
+    //                 value_id
+    //             }
+    //         }
+
+    //         TypedExprKind::If {
+    //             condition,
+    //             then_branch,
+    //             else_branch,
+    //         } => {
+    //             let cond_id = self.lower_expr(condition, block_id);
+    //             let then_label = self.new_label();
+    //             let else_label = self.new_label();
+    //             let merge_label = self.new_label();
+
+    //             self.emit(
+    //                 block_id,
+    //                 CIROp::Branch(cond_id.clone(), then_label.clone(), else_label.clone()),
+    //             );
+
+    //             // Then branch
+    //             self.emit(block_id, CIROp::Label(then_label));
+    //             let then_id = self.lower_expr(then_branch, block_id);
+    //             self.emit(block_id, CIROp::Jump(merge_label.clone()));
+
+    //             // Else branch
+    //             self.emit(block_id, CIROp::Label(else_label));
+    //             let else_id = if let TypedExprKind::Block { statements } = &else_branch.kind {
+    //                 if statements.is_empty() {
+    //                     // Emit a dummy Unit value for empty else block
+    //                     self.emit(block_id, CIROp::Const(CIRType::Unit, CirValue::Unit))
+    //                 } else {
+    //                     self.lower_expr(else_branch, block_id)
+    //                 }
+    //             } else {
+    //                 self.lower_expr(else_branch, block_id)
+    //             };
+    //             self.emit(block_id, CIROp::Jump(merge_label.clone()));
+
+    //             // Merge point
+    //             self.emit(block_id, CIROp::Label(merge_label));
+
+    //             // Only use Select if both branches return non-Unit values
+    //             if then_branch.type_info.clone().into_type() != Some(Type::Unit)
+    //                 && else_branch.type_info.clone().into_type() != Some(Type::Unit)
+    //             {
+    //                 let result = self.emit(block_id, CIROp::Select(cond_id, then_id, else_id));
+    //                 result
+    //             } else {
+    //                 ValueId("unit".to_string()) // No value to return, just control flow
+    //             }
+    //         }
+    //         TypedExprKind::BinOp { left, op, right } => {
+    //             let left_id = self.lower_expr(left, block_id);
+    //             let right_id = self.lower_expr(right, block_id);
+    //             let ty = CIRType::from(expr.type_info.as_type().unwrap());
+    //             match op {
+    //                 InfixOpKind::Add => self.emit(block_id, CIROp::Add(ty, left_id, right_id)),
+    //                 InfixOpKind::Greater => self.emit(block_id, CIROp::Gt(ty, left_id, right_id)),
+    //                 InfixOpKind::GreaterOrEq => {
+    //                     self.emit(block_id, CIROp::GtOrEq(ty, left_id, right_id))
+    //                 }
+    //                 InfixOpKind::Less => self.emit(block_id, CIROp::Lt(ty, left_id, right_id)),
+    //                 InfixOpKind::LessOrEq => {
+    //                     self.emit(block_id, CIROp::LtOrEq(ty, left_id, right_id))
+    //                 }
+    //                 InfixOpKind::Equals => self.emit(block_id, CIROp::Eq(ty, left_id, right_id)),
+    //                 InfixOpKind::NotEq => self.emit(block_id, CIROp::Neq(ty, left_id, right_id)),
+    //                 InfixOpKind::Sub => self.emit(block_id, CIROp::Sub(left_id, right_id)),
+    //                 InfixOpKind::Mul => self.emit(block_id, CIROp::Mul(left_id, right_id)),
+    //                 InfixOpKind::Div => self.emit(block_id, CIROp::Div(left_id, right_id)),
+    //                 InfixOpKind::Exp => self.emit(block_id, CIROp::Exponent(left_id, right_id)),
+    //                 InfixOpKind::Mod => self.emit(block_id, CIROp::Modulo(left_id, right_id)),
+    //                 _ => unimplemented!("Only basic comparisons supported in this subset"),
+    //             }
+    //         }
+    //         TypedExprKind::Block { statements } => {
+    //             let mut last_id = None;
+    //             for stmt in statements {
+    //                 last_id = Some(self.lower_expr(stmt, block_id));
+    //             }
+    //             println!("The last id: {:?}", last_id);
+    //             last_id.unwrap_or_else(|| {
+    //                 panic!("Block must have at least one statement in this subset");
+    //             })
+    //         }
+    //         TypedExprKind::Struct { id, fields } => {
+    //             // Define struct type (stored in CIRType, no runtime effect yet)
+    //             let struct_type = CIRType::from(expr.type_info.as_type().unwrap());
+    //             // For now, we’ll assume this is an instance creation if fields have values
+    //             // If it’s a pure definition, it’s handled by type inference, not CIR
+    //             ValueId(format!("struct_def_{}", self.blocks.len())) // Placeholder, typically no CIR for pure defs
+    //         }
+    //         TypedExprKind::FieldAccess { expr, field } => {
+    //             let base_id = self.lower_expr(expr, block_id);
+    //             if let Value::Identifier(field_name) = field {
+    //                 let ty = CIRType::from(expr.type_info.as_type().unwrap());
+    //                 self.emit(block_id, CIROp::GetField(base_id, field_name.to_string()))
+    //             } else {
+    //                 panic!("Field access must use an identifier");
+    //             }
+    //         }
+    //         TypedExprKind::List { elements } => {
+    //             let element_ids: Vec<ValueId> = elements
+    //                 .iter()
+    //                 .map(|elem| self.lower_expr(elem, block_id))
+    //                 .collect();
+    //             let list_type = match &expr.type_info {
+    //                 TypeInfo::Known(ty) | TypeInfo::Inferred(ty) => CIRType::from(ty),
+    //                 TypeInfo::Unknown => panic!("List type not inferred"), // Temporary panic
+    //             };
+    //             self.emit(block_id, CIROp::List(element_ids))
+    //         }
+    //         TypedExprKind::Assign { target, expr } => {
+    //             let expr_id = self.lower_expr(expr, block_id);
+    //             match &target.kind {
+    //                 TypedExprKind::Index { expr: base, index } => {
+    //                     let base_id = self.lower_expr(base, block_id);
+    //                     let index_id = self.lower_expr(index, block_id);
+    //                     self.emit(block_id, CIROp::StoreAt(base_id, index_id, expr_id));
+    //                     ValueId("unit".to_string())
+    //                 }
+    //                 _ => {
+    //                     let target_id = self.lower_expr(target, block_id);
+    //                     self.emit(block_id, CIROp::Store(target_id, expr_id));
+    //                     ValueId("unit".to_string())
+    //                 }
+    //             }
+    //         }
+    //         TypedExprKind::StructInit { id, fields } => {
+    //             let struct_name = if let Value::Identifier(name) = id {
+    //                 name.to_string()
+    //             } else {
+    //                 panic!("StructInit id must be an identifier");
+    //             };
+    //             let field_values: HashMap<String, ValueId> = fields
+    //                 .iter()
+    //                 .map(|(field_name, value_expr)| {
+    //                     let field_name_str: String = if let Value::Identifier(name) = field_name {
+    //                         name.to_string()
+    //                     } else {
+    //                         panic!("Field name must be an identifier");
+    //                     };
+    //                     let value_id = self.lower_expr(value_expr, block_id);
+    //                     (field_name_str, value_id)
+    //                 })
+    //                 .collect();
+    //             let struct_type = match &expr.type_info {
+    //                 TypeInfo::Known(ty) | TypeInfo::Inferred(ty) => CIRType::from(ty),
+    //                 TypeInfo::Unknown => panic!("Struct type not inferred for {}", struct_name),
+    //             };
+    //             self.emit(block_id, CIROp::Struct(struct_type, field_values))
+    //         }
+    //         TypedExprKind::Index { expr, index } => {
+    //             let list_id = self.lower_expr(expr, block_id);
+    //             let index_id = self.lower_expr(index, block_id);
+    //             self.emit(block_id, CIROp::Index(list_id, index_id))
+    //         }
+    //         TypedExprKind::While { guard, body } => {
+    //             let body_start = self.new_label();
+    //             let exit_label = self.new_label();
+    //             let loop_start = self.new_label();
+
+    //             // Loop header: compute guard each iteration
+    //             self.emit(block_id, CIROp::Label(loop_start.clone()));
+    //             let guard_id = self.lower_expr(guard, block_id); // Recompute guard
+    //             self.emit(
+    //                 block_id,
+    //                 CIROp::Branch(guard_id.clone(), body_start.clone(), exit_label.clone()),
+    //             );
+
+    //             // Body
+    //             self.emit(block_id, CIROp::Label(body_start));
+    //             let _ = self.lower_expr(body, block_id);
+    //             self.emit(block_id, CIROp::Jump(loop_start));
+
+    //             // Exit
+    //             self.emit(block_id, CIROp::Label(exit_label));
+
+    //             ValueId("unit".to_string())
+    //         }
+    //         TypedExprKind::For {
+    //             var,
+    //             iterable,
+    //             body,
+    //         } => {
+    //             let list_id = self.lower_expr(iterable, block_id);
+    //             let var_id = if let Value::Identifier(name) = var {
+    //                 let new_var_id = self.new_temp(block_id);
+    //                 self.param_map.insert(name.to_string(), new_var_id.clone());
+    //                 new_var_id
+    //             } else {
+    //                 self.new_temp(block_id)
+    //             };
+    //             let body_start = self.new_label();
+    //             let exit_label = self.new_label();
+
+    //             // Emit the For op to start iteration
+    //             self.emit(
+    //                 block_id,
+    //                 CIROp::For {
+    //                     var: var_id.clone(),
+    //                     list: list_id,
+    //                     body_start: body_start.clone(),
+    //                     exit_label: exit_label.clone(),
+    //                 },
+    //             );
+
+    //             // Body block
+    //             self.emit(block_id, CIROp::Label(body_start.clone()));
+    //             let _ = self.lower_expr(body, block_id); // Execute body
+    //             self.emit(block_id, CIROp::Jump(body_start)); // Loop back
+
+    //             // Exit block
+    //             self.emit(block_id, CIROp::Label(exit_label));
+
+    //             // Clean up param_map (optional, depending on scope handling)
+    //             if let Value::Identifier(name) = var {
+    //                 self.param_map.remove(*name);
+    //             }
+
+    //             ValueId("unit".to_string())
+    //         }
+    //         _ => unimplemented!("Other expressions not yet supported in SSA subset"),
+    //     }
+    // }
+
+    fn new_temp(&mut self, block_id: usize) -> ValueId {
+        let counter = self.block_temp_counters.entry(block_id).or_insert(0);
+        let temp = format!("%{}", *counter);
+        *counter += 1;
+        println!(
+            "new_temp for block {}: {} (counter now {})",
+            block_id, temp, *counter
+        );
+        ValueId(temp)
+    }
+
     fn emit(&mut self, block_id: usize, op: CIROp) -> ValueId {
-        let result = match op {
+        let result = match &op {
             CIROp::Label(_)
             | CIROp::Branch(_, _, _)
             | CIROp::Jump(_)
             | CIROp::Return(_)
             | CIROp::Store(_, _)
             | CIROp::StoreAt(_, _, _) => ValueId("".to_string()),
+            CIROp::Call(_, _) => panic!("Call should provide its own result ID"), // Prevent double temp
             _ => self.new_temp(block_id),
         };
         if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
+            println!(
+                "Emitting in block {}: {:?} with result {:?}",
+                block_id, op, result
+            );
             block
                 .instructions
                 .push(CIRInstruction::new(op, result.clone()));
@@ -173,6 +593,7 @@ impl SSACIRBuilder {
     }
 
     fn lower_expr(&mut self, expr: &TypedExpr, block_id: usize) -> ValueId {
+        println!("Lowering expr in block {}: {:?}", block_id, expr.kind);
         match &expr.kind {
             TypedExprKind::Value(val) => match val {
                 Value::Num(n) => {
@@ -192,18 +613,6 @@ impl SSACIRBuilder {
                 }
                 _ => unimplemented!("Other Value types not yet supported"),
             },
-            // TypedExprKind::Let {
-            //     id,
-            //     pat,
-            //     expr,
-            //     constness,
-            // } => {
-            //     let value_id = self.lower_expr(expr, block_id);
-            //     if let Value::Identifier(name) = id {
-            //         self.param_map.insert(name.to_string(), value_id.clone());
-            //     }
-            //     value_id // Return the value_id of the expression (e.g., for let p = ...)
-            // }
             TypedExprKind::Let {
                 id,
                 pat,
@@ -211,9 +620,10 @@ impl SSACIRBuilder {
                 constness,
             } => {
                 let value_id = self.lower_expr(expr, block_id);
+                println!("Let binding: value_id = {:?}", value_id);
                 if let Value::Identifier(name) = id {
-                    let target_id = ValueId(name.to_string()); // Use the variable name directly
-                    self.emit(block_id, CIROp::Store(target_id.clone(), value_id));
+                    let target_id = ValueId(name.to_string());
+                    self.emit(block_id, CIROp::Store(target_id.clone(), value_id.clone()));
                     self.param_map.insert(name.to_string(), target_id.clone());
                     target_id
                 } else {
@@ -233,15 +643,18 @@ impl SSACIRBuilder {
                         id: block_id,
                         instructions: Vec::new(),
                     });
-                    self.block_temp_counters.insert(block_id, 0);
+                    self.block_temp_counters.insert(block_id, 0); // Reset counter
                     self.param_map.clear();
-                    println!("Params for {}: {:?}", fn_name, params);
+                    println!(
+                        "Fn {}: block_id = {}, params = {:?}",
+                        fn_name, block_id, params
+                    );
                     for (i, param) in params.iter().enumerate() {
-                        if let Value::Identifier(param_name) = &param.name {
-                            let param_id = ValueId(format!("param{}", i));
+                        if let Value::Identifier(param_name) = param.name {
+                            let param_id = ValueId(format!("param{}", i + block_id * 10));
                             self.param_map
                                 .insert(param_name.to_string(), param_id.clone());
-                            println!("Inserted '{}': {:?}", param_name, param_id);
+                            println!("Inserted param '{}': {:?}", param_name, param_id);
                         }
                     }
                     println!("param_map after insertion: {:?}", self.param_map);
@@ -255,19 +668,62 @@ impl SSACIRBuilder {
             TypedExprKind::Call { name, args } => {
                 let mut arg_ids = Vec::new();
                 for arg in args {
-                    arg_ids.push(self.lower_expr(arg, block_id));
+                    let arg_id = self.lower_expr(arg, block_id);
+                    arg_ids.push(arg_id.clone());
+                    println!("Call arg: {:?}", arg_id);
                 }
                 if let TypedExprKind::Value(Value::Identifier(fn_name)) = &name.kind {
-                    println!("the function map: {:?}", self.function_map);
-                    println!("The function's name is: {:?}", fn_name);
-                    let fn_block_id = *self
-                        .function_map
-                        .get(fn_name.clone())
-                        .expect("Function not found");
-                    let ty = CIRType::from(expr.type_info.as_type().unwrap());
-                    self.emit(block_id, CIROp::Call(fn_block_id, arg_ids))
+                    let fn_block_id = *self.function_map.get(*fn_name).expect("Function not found");
+                    let adjusted_arg_ids: Vec<ValueId> = arg_ids
+                        .iter()
+                        .enumerate()
+                        .map(|(i, _)| ValueId(format!("param{}", i + fn_block_id * 10)))
+                        .collect();
+                    for (i, arg_id) in arg_ids.iter().enumerate() {
+                        self.emit(
+                            block_id,
+                            CIROp::Store(adjusted_arg_ids[i].clone(), arg_id.clone()),
+                        );
+                    }
+                    let call_result_id = self.new_temp(block_id); // e.g., %0
+                    println!("Call result ID assigned: {:?}", call_result_id);
+                    if let Some(block) = self.blocks.iter_mut().find(|b| b.id == block_id) {
+                        println!(
+                            "Emitting in block {}: Call({}, {:?}) with result {:?}",
+                            block_id, fn_block_id, adjusted_arg_ids, call_result_id
+                        );
+                        block.instructions.push(CIRInstruction::new(
+                            CIROp::Call(fn_block_id, adjusted_arg_ids),
+                            call_result_id.clone(),
+                        ));
+                    }
+                    call_result_id
                 } else {
                     panic!("Call target must be an identifier");
+                }
+            }
+            TypedExprKind::BinOp { left, op, right } => {
+                let left_id = self.lower_expr(left, block_id);
+                let right_id = self.lower_expr(right, block_id);
+                let ty = CIRType::from(expr.type_info.as_type().unwrap());
+                match op {
+                    InfixOpKind::Add => self.emit(block_id, CIROp::Add(ty, left_id, right_id)),
+                    InfixOpKind::Greater => self.emit(block_id, CIROp::Gt(ty, left_id, right_id)),
+                    InfixOpKind::GreaterOrEq => {
+                        self.emit(block_id, CIROp::GtOrEq(ty, left_id, right_id))
+                    }
+                    InfixOpKind::Less => self.emit(block_id, CIROp::Lt(ty, left_id, right_id)),
+                    InfixOpKind::LessOrEq => {
+                        self.emit(block_id, CIROp::LtOrEq(ty, left_id, right_id))
+                    }
+                    InfixOpKind::Equals => self.emit(block_id, CIROp::Eq(ty, left_id, right_id)),
+                    InfixOpKind::NotEq => self.emit(block_id, CIROp::Neq(ty, left_id, right_id)),
+                    InfixOpKind::Sub => self.emit(block_id, CIROp::Sub(left_id, right_id)),
+                    InfixOpKind::Mul => self.emit(block_id, CIROp::Mul(left_id, right_id)),
+                    InfixOpKind::Div => self.emit(block_id, CIROp::Div(left_id, right_id)),
+                    InfixOpKind::Exp => self.emit(block_id, CIROp::Exponent(left_id, right_id)),
+                    InfixOpKind::Mod => self.emit(block_id, CIROp::Modulo(left_id, right_id)),
+                    _ => unimplemented!("Only basic comparisons supported in this subset"),
                 }
             }
             TypedExprKind::If {
@@ -317,55 +773,13 @@ impl SSACIRBuilder {
                     ValueId("unit".to_string()) // No value to return, just control flow
                 }
             }
-            TypedExprKind::BinOp { left, op, right } => {
-                let left_id = self.lower_expr(left, block_id);
-                let right_id = self.lower_expr(right, block_id);
-                let ty = CIRType::from(expr.type_info.as_type().unwrap());
-                match op {
-                    InfixOpKind::Add => self.emit(block_id, CIROp::Add(ty, left_id, right_id)),
-                    InfixOpKind::Greater => self.emit(block_id, CIROp::Gt(ty, left_id, right_id)),
-                    InfixOpKind::GreaterOrEq => {
-                        self.emit(block_id, CIROp::GtOrEq(ty, left_id, right_id))
-                    }
-                    InfixOpKind::Less => self.emit(block_id, CIROp::Lt(ty, left_id, right_id)),
-                    InfixOpKind::LessOrEq => {
-                        self.emit(block_id, CIROp::LtOrEq(ty, left_id, right_id))
-                    }
-                    InfixOpKind::Equals => self.emit(block_id, CIROp::Eq(ty, left_id, right_id)),
-                    InfixOpKind::NotEq => self.emit(block_id, CIROp::Neq(ty, left_id, right_id)),
-                    InfixOpKind::Sub => self.emit(block_id, CIROp::Sub(left_id, right_id)),
-                    InfixOpKind::Mul => self.emit(block_id, CIROp::Mul(left_id, right_id)),
-                    InfixOpKind::Div => self.emit(block_id, CIROp::Div(left_id, right_id)),
-                    InfixOpKind::Exp => self.emit(block_id, CIROp::Exponent(left_id, right_id)),
-                    InfixOpKind::Mod => self.emit(block_id, CIROp::Modulo(left_id, right_id)),
-                    _ => unimplemented!("Only basic comparisons supported in this subset"),
-                }
-            }
             TypedExprKind::Block { statements } => {
                 let mut last_id = None;
                 for stmt in statements {
                     last_id = Some(self.lower_expr(stmt, block_id));
                 }
-                println!("The last id: {:?}", last_id);
-                last_id.unwrap_or_else(|| {
-                    panic!("Block must have at least one statement in this subset");
-                })
-            }
-            TypedExprKind::Struct { id, fields } => {
-                // Define struct type (stored in CIRType, no runtime effect yet)
-                let struct_type = CIRType::from(expr.type_info.as_type().unwrap());
-                // For now, we’ll assume this is an instance creation if fields have values
-                // If it’s a pure definition, it’s handled by type inference, not CIR
-                ValueId(format!("struct_def_{}", self.blocks.len())) // Placeholder, typically no CIR for pure defs
-            }
-            TypedExprKind::FieldAccess { expr, field } => {
-                let base_id = self.lower_expr(expr, block_id);
-                if let Value::Identifier(field_name) = field {
-                    let ty = CIRType::from(expr.type_info.as_type().unwrap());
-                    self.emit(block_id, CIROp::GetField(base_id, field_name.to_string()))
-                } else {
-                    panic!("Field access must use an identifier");
-                }
+                println!("Block last_id: {:?}", last_id);
+                last_id.unwrap_or_else(|| panic!("Block must have at least one statement"))
             }
             TypedExprKind::List { elements } => {
                 let element_ids: Vec<ValueId> = elements
@@ -378,117 +792,13 @@ impl SSACIRBuilder {
                 };
                 self.emit(block_id, CIROp::List(element_ids))
             }
-            TypedExprKind::Assign { target, expr } => {
-                let expr_id = self.lower_expr(expr, block_id);
-                match &target.kind {
-                    TypedExprKind::Index { expr: base, index } => {
-                        let base_id = self.lower_expr(base, block_id);
-                        let index_id = self.lower_expr(index, block_id);
-                        self.emit(block_id, CIROp::StoreAt(base_id, index_id, expr_id));
-                        ValueId("unit".to_string())
-                    }
-                    _ => {
-                        let target_id = self.lower_expr(target, block_id);
-                        self.emit(block_id, CIROp::Store(target_id, expr_id));
-                        ValueId("unit".to_string())
-                    }
-                }
-            }
-            TypedExprKind::StructInit { id, fields } => {
-                let struct_name = if let Value::Identifier(name) = id {
-                    name.to_string()
-                } else {
-                    panic!("StructInit id must be an identifier");
-                };
-                let field_values: HashMap<String, ValueId> = fields
-                    .iter()
-                    .map(|(field_name, value_expr)| {
-                        let field_name_str: String = if let Value::Identifier(name) = field_name {
-                            name.to_string()
-                        } else {
-                            panic!("Field name must be an identifier");
-                        };
-                        let value_id = self.lower_expr(value_expr, block_id);
-                        (field_name_str, value_id)
-                    })
-                    .collect();
-                let struct_type = match &expr.type_info {
-                    TypeInfo::Known(ty) | TypeInfo::Inferred(ty) => CIRType::from(ty),
-                    TypeInfo::Unknown => panic!("Struct type not inferred for {}", struct_name),
-                };
-                self.emit(block_id, CIROp::Struct(struct_type, field_values))
-            }
             TypedExprKind::Index { expr, index } => {
                 let list_id = self.lower_expr(expr, block_id);
                 let index_id = self.lower_expr(index, block_id);
                 self.emit(block_id, CIROp::Index(list_id, index_id))
             }
-            TypedExprKind::While { guard, body } => {
-                let body_start = self.new_label();
-                let exit_label = self.new_label();
-                let loop_start = self.new_label();
 
-                // Loop header: compute guard each iteration
-                self.emit(block_id, CIROp::Label(loop_start.clone()));
-                let guard_id = self.lower_expr(guard, block_id); // Recompute guard
-                self.emit(
-                    block_id,
-                    CIROp::Branch(guard_id.clone(), body_start.clone(), exit_label.clone()),
-                );
-
-                // Body
-                self.emit(block_id, CIROp::Label(body_start));
-                let _ = self.lower_expr(body, block_id);
-                self.emit(block_id, CIROp::Jump(loop_start));
-
-                // Exit
-                self.emit(block_id, CIROp::Label(exit_label));
-
-                ValueId("unit".to_string())
-            }
-            TypedExprKind::For {
-                var,
-                iterable,
-                body,
-            } => {
-                let list_id = self.lower_expr(iterable, block_id);
-                let var_id = if let Value::Identifier(name) = var {
-                    let new_var_id = self.new_temp(block_id);
-                    self.param_map.insert(name.to_string(), new_var_id.clone());
-                    new_var_id
-                } else {
-                    self.new_temp(block_id)
-                };
-                let body_start = self.new_label();
-                let exit_label = self.new_label();
-
-                // Emit the For op to start iteration
-                self.emit(
-                    block_id,
-                    CIROp::For {
-                        var: var_id.clone(),
-                        list: list_id,
-                        body_start: body_start.clone(),
-                        exit_label: exit_label.clone(),
-                    },
-                );
-
-                // Body block
-                self.emit(block_id, CIROp::Label(body_start.clone()));
-                let _ = self.lower_expr(body, block_id); // Execute body
-                self.emit(block_id, CIROp::Jump(body_start)); // Loop back
-
-                // Exit block
-                self.emit(block_id, CIROp::Label(exit_label));
-
-                // Clean up param_map (optional, depending on scope handling)
-                if let Value::Identifier(name) = var {
-                    self.param_map.remove(*name);
-                }
-
-                ValueId("unit".to_string())
-            }
-            _ => unimplemented!("Other expressions not yet supported in SSA subset"),
+            _ => unimplemented!("Unsupported expression: {:?}", expr.kind),
         }
     }
 
