@@ -55,6 +55,7 @@ pub enum UntypedExpr<'src> {
     Call {
         name: Box<Self>,
         args: Vec<Self>,
+        compeval: bool,
     },
 
     BinOp {

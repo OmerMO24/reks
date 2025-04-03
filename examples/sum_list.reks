@@ -1,0 +1,13 @@
+fn sum_list() -> i32 {
+	const lst = [1,2,3];
+    mut sum = 0;
+    mut i = 0;
+    while i < 3 {
+        sum = sum + lst[i];
+        i = i + 1;
+    }
+    sum
+}
+fn main() -> i32 {
+    compeval sum_list()
+}

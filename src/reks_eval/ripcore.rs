@@ -12,13 +12,13 @@ struct CallFrame {
 
 #[derive(Debug, Clone)]
 pub struct Interpreter {
-    cir: CIR,
-    stack: Vec<CirValue>,
-    temps: HashMap<usize, HashMap<ValueId, CirValue>>,
-    call_stack: Vec<CallFrame>,
-    current_block: usize,
-    pc: usize,
-    label_map: HashMap<usize, HashMap<String, usize>>, // Block ID -> Label -> Instruction Index
+    pub(crate) cir: CIR,
+    pub(crate) stack: Vec<CirValue>,
+    pub(crate) temps: HashMap<usize, HashMap<ValueId, CirValue>>,
+    pub(crate) call_stack: Vec<CallFrame>,
+    pub(crate) current_block: usize,
+    pub(crate) pc: usize,
+    pub(crate) label_map: HashMap<usize, HashMap<String, usize>>, // Block ID -> Label -> Instruction Index
 }
 
 impl Interpreter {
@@ -42,16 +42,43 @@ impl Interpreter {
             stack: Vec::new(),
             temps: HashMap::new(),
             call_stack: Vec::new(),
-            current_block: main_block, // Start at main
+            current_block: main_block,
             pc: 0,
             label_map,
         }
     }
 
+    // Query a function with args, return result
+    pub fn eval_function(&mut self, fn_name: &str, args: Vec<CirValue>) -> Option<CirValue> {
+        let block_id = *self.cir.function_map.get(fn_name)?;
+        let mut block_temps = HashMap::new();
+        for (i, arg) in args.into_iter().enumerate() {
+            let param_id = ValueId(format!("param{}", i + block_id * 10));
+            block_temps.insert(param_id.clone(), arg);
+            println!(
+                "eval_function: Set param {} = {:?} for block {}",
+                param_id.0,
+                block_temps.get(&param_id),
+                block_id
+            );
+        }
+        self.temps.insert(block_id, block_temps);
+        println!(
+            "eval_function: Temps after setup for block {}: {:?}",
+            block_id,
+            self.temps.get(&block_id)
+        );
+        self.current_block = block_id;
+        self.run()
+    }
+
     pub fn run(&mut self) -> Option<CirValue> {
         self.pc = 0;
-        self.temps.insert(self.current_block, HashMap::new());
-        println!("Starting at block {}:", self.current_block);
+        println!(
+            "Starting at block {} with temps: {:?}",
+            self.current_block,
+            self.temps.get(&self.current_block)
+        );
 
         loop {
             let block = match self.cir.blocks.get(self.current_block) {
@@ -94,128 +121,106 @@ impl Interpreter {
                 instr.op,
                 self.stack,
                 self.call_stack,
-                self.temps
+                self.temps.get(&self.current_block)
             );
+            let mut block_temps = self
+                .temps
+                .get(&self.current_block)
+                .cloned()
+                .unwrap_or_else(HashMap::new);
             match &instr.op {
                 CIROp::Const(ty, val) => {
                     self.stack.push(val.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), val.clone());
+                    block_temps.insert(instr.result.clone(), val.clone());
+                    self.temps.insert(self.current_block, block_temps.clone());
                     self.pc += 1;
                 }
-                CIROp::Add(ty, left_id, right_id) => {
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Int(l + r),
-                        _ => panic!("Invalid types for Add"),
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
+                CIROp::Add(_, left_id, right_id) => {
+                    println!(
+                        "run: Fetching left_id {}: {:?}",
+                        left_id.0,
+                        block_temps.get(left_id)
+                    );
+                    println!(
+                        "run: Fetching right_id {}: {:?}",
+                        right_id.0,
+                        block_temps.get(right_id)
+                    );
+                    let left = block_temps.get(left_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            left_id.0, self.current_block
+                        )
+                    });
+                    let right = block_temps.get(right_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            right_id.0, self.current_block
+                        )
+                    });
+                    if let (CirValue::Int(l), CirValue::Int(r)) = (left, right) {
+                        block_temps.insert(instr.result.clone(), CirValue::Int(l + r));
+                        self.temps.insert(self.current_block, block_temps.clone());
+                    }
                     self.pc += 1;
                 }
                 CIROp::Sub(left_id, right_id) => {
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Int(l - r),
-                        _ => panic!("Subtraction only supported for integers"), // Temporary panic
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
+                    let left = block_temps.get(left_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            left_id.0, self.current_block
+                        )
+                    });
+                    let right = block_temps.get(right_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            right_id.0, self.current_block
+                        )
+                    });
+                    if let (CirValue::Int(l), CirValue::Int(r)) = (left, right) {
+                        block_temps.insert(instr.result.clone(), CirValue::Int(l - r));
+                        self.temps.insert(self.current_block, block_temps.clone());
+                    }
                     self.pc += 1;
                 }
                 CIROp::Mul(left_id, right_id) => {
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    println!(
-                        "DEBUG MUL: {} * {} = {}",
-                        match &left {
-                            CirValue::Int(l) => l,
-                            _ => &0,
-                        },
-                        match &right {
-                            CirValue::Int(r) => r,
-                            _ => &0,
-                        },
-                        match (&left, &right) {
-                            (CirValue::Int(l), CirValue::Int(r)) => l * r,
-                            _ => 0,
-                        }
-                    );
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Int(l * r),
-                        _ => panic!("Multiplication only supported for integers"),
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
+                    let left = block_temps.get(left_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            left_id.0, self.current_block
+                        )
+                    });
+                    let right = block_temps.get(right_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            right_id.0, self.current_block
+                        )
+                    });
+                    if let (CirValue::Int(l), CirValue::Int(r)) = (left, right) {
+                        block_temps.insert(instr.result.clone(), CirValue::Int(l * r));
+                        self.temps.insert(self.current_block, block_temps.clone());
+                    }
                     self.pc += 1;
                 }
-                CIROp::Div(left_id, right_id) => {
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) if r != 0 => CirValue::Int(l / r),
-                        (CirValue::Int(_), CirValue::Int(0)) => panic!("Division by zero"), // Temporary panic
-                        _ => panic!("Division only supported for integers"), // Temporary panic
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
-                }
-                CIROp::Exponent(base_id, exp_id) => {
-                    let base = self.temps[&self.current_block][base_id].clone();
-                    let exp = self.temps[&self.current_block][exp_id].clone();
-                    let result = match (base, exp) {
-                        (CirValue::Int(b), CirValue::Int(e)) => CirValue::Int(b.pow(e as u32)), // Assuming e >= 0
-                        _ => panic!("Exponentiation only supported for integers"), // Temporary panic
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
-                }
-                CIROp::Modulo(left_id, right_id) => {
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) if r != 0 => CirValue::Int(l % r),
-                        (CirValue::Int(_), CirValue::Int(0)) => panic!("Modulo by zero"), // Temporary panic
-                        _ => panic!("Modulo only supported for integers"), // Temporary panic
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
-                }
-                CIROp::Call(block_id, arg_ids) => {
+                CIROp::Call(block_id, arg_ids, is_compeval) => {
                     let args: Vec<CirValue> = arg_ids
                         .iter()
-                        .map(|id| self.temps[&self.current_block][id].clone())
+                        .map(|id| {
+                            block_temps.get(id).cloned().unwrap_or_else(|| {
+                                panic!("Arg {} not found in block {}", id.0, self.current_block)
+                            })
+                        })
                         .collect();
+                    println!("Calling block {} with args: {:?}", block_id, args);
                     self.call_stack.push(CallFrame {
                         block_id: self.current_block,
                         return_pc: self.pc + 1,
-                        return_slot: Some(instr.result.clone()),
-                        temps: Some(self.temps.get(&self.current_block).cloned().unwrap()),
+                        return_slot: if instr.result.0.is_empty() {
+                            None
+                        } else {
+                            Some(instr.result.clone())
+                        },
+                        temps: Some(block_temps.clone()),
                     });
                     self.current_block = *block_id;
                     self.pc = 0;
@@ -224,92 +229,35 @@ impl Interpreter {
                         .or_insert_with(HashMap::new)
                         .clear();
                     for (i, arg) in args.into_iter().enumerate() {
-                        let param_id = ValueId(format!("param{}", i + self.current_block * 10)); // Match builder
+                        let param_id = ValueId(format!("param{}", i + self.current_block * 10));
                         self.temps
                             .get_mut(&self.current_block)
                             .unwrap()
                             .insert(param_id, arg);
                     }
                 }
-                CIROp::Store(target_id, value_id) => {
-                    let value = self.temps[&self.current_block][value_id].clone();
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(target_id.clone(), value);
-                    self.pc += 1;
-                }
-                // CIROp::Store(target_id, value_id) => {
-                //     let value = self.temps[&self.current_block][value_id].clone();
-                //     let target = self.temps[&self.current_block][target_id].clone();
-                //     match target {
-                //         CirValue::List(mut elements) => {
-                //             // If target was indexed, we need the index from prior Index op
-                //             // For now, assume full list replacement (fix below)
-                //             self.temps
-                //                 .get_mut(&self.current_block)
-                //                 .unwrap()
-                //                 .insert(target_id.clone(), value);
-                //             self.pc += 1;
-                //         }
-                //         _ => {
-                //             self.temps
-                //                 .get_mut(&self.current_block)
-                //                 .unwrap()
-                //                 .insert(target_id.clone(), value);
-                //             self.pc += 1;
-                //         }
-                //     }
-                // }
-                CIROp::StoreAt(list_id, index_id, value_id) => {
-                    let list = self.temps[&self.current_block][list_id].clone();
-                    let index = self.temps[&self.current_block][index_id].clone();
-                    let value = self.temps[&self.current_block][value_id].clone();
-                    match (list, index) {
-                        (CirValue::List(mut elements), CirValue::Int(i)) => {
-                            let idx = i as usize;
-                            if idx < elements.len() {
-                                elements[idx] = value;
-                                self.temps
-                                    .get_mut(&self.current_block)
-                                    .unwrap()
-                                    .insert(list_id.clone(), CirValue::List(elements));
-                                self.pc += 1;
-                            } else {
-                                panic!(
-                                    "Index {} out of bounds for list of length {}",
-                                    idx,
-                                    elements.len()
-                                );
-                            }
-                        }
-                        _ => panic!("StoreAt requires a list and integer index"),
-                    }
-                }
                 CIROp::Return(val_id) => {
-                    let result = self.temps[&self.current_block][val_id].clone();
+                    let result = block_temps.get(val_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            val_id.0, self.current_block
+                        )
+                    });
                     println!("Returning from block {}: {:?}", self.current_block, result);
-
+                    self.temps.insert(self.current_block, block_temps);
                     if let Some(frame) = self.call_stack.pop() {
-                        // Switch back to caller's block
                         self.current_block = frame.block_id;
                         self.pc = frame.return_pc;
-
-                        // Restore the caller's complete environment
                         if let Some(saved_temps) = frame.temps {
-                            // Replace the current temps with the saved environment
                             self.temps.insert(self.current_block, saved_temps);
                         }
-
-                        // Add the return value to the restored environment
                         if let Some(slot) = frame.return_slot {
                             self.temps
-                                .get_mut(&self.current_block)
-                                .unwrap()
-                                .insert(slot, result.clone());
+                                .entry(self.current_block)
+                                .or_insert_with(HashMap::new)
+                                .insert(slot.clone(), result.clone());
                             self.stack.push(result.clone());
                         }
-
                         println!(
                             "Returned to block {} at PC {}: Call Stack: {:?}",
                             self.current_block, self.pc, self.call_stack
@@ -319,235 +267,300 @@ impl Interpreter {
                         return Some(result);
                     }
                 }
-                CIROp::Gt(ty, left_id, right_id) => {
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Bool(l > r),
-                        _ => panic!("Invalid types for Gt"),
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
+                CIROp::Lt(_, left_id, right_id) => {
+                    let left = block_temps.get(left_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            left_id.0, self.current_block
+                        )
+                    });
+                    let right = block_temps.get(right_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            right_id.0, self.current_block
+                        )
+                    });
+                    if let (CirValue::Int(l), CirValue::Int(r)) = (left, right) {
+                        block_temps.insert(instr.result.clone(), CirValue::Bool(l < r));
+                        self.temps.insert(self.current_block, block_temps.clone());
+                    }
                     self.pc += 1;
                 }
-                CIROp::GtOrEq(ty, left_id, right_id) => {
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Bool(l >= r),
-                        _ => panic!("Invalid types for Gt"),
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
+                CIROp::Gt(_, left_id, right_id) => {
+                    let left = block_temps.get(left_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            left_id.0, self.current_block
+                        )
+                    });
+                    let right = block_temps.get(right_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            right_id.0, self.current_block
+                        )
+                    });
+                    if let (CirValue::Int(l), CirValue::Int(r)) = (left, right) {
+                        block_temps.insert(instr.result.clone(), CirValue::Bool(l > r));
+                        self.temps.insert(self.current_block, block_temps.clone());
+                    }
                     self.pc += 1;
                 }
-                CIROp::Lt(ty, left_id, right_id) => {
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Bool(l < r),
-                        _ => panic!("Invalid types for Lt"),
+                CIROp::Select(cond_id, then_id, else_id) => {
+                    println!(
+                        "run: Selecting with cond {}: {:?}, then {}: {:?}, else {}: {:?}",
+                        cond_id.0,
+                        block_temps.get(cond_id),
+                        then_id.0,
+                        block_temps.get(then_id),
+                        else_id.0,
+                        block_temps.get(else_id)
+                    );
+                    let cond = block_temps.get(cond_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            cond_id.0, self.current_block
+                        )
+                    });
+                    let then_val = block_temps.get(then_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            then_id.0, self.current_block
+                        )
+                    });
+                    let else_val = block_temps.get(else_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            else_id.0, self.current_block
+                        )
+                    });
+                    let result = match cond {
+                        CirValue::Bool(true) => then_val,
+                        CirValue::Bool(false) => else_val,
+                        _ => panic!("Invalid condition type for Select: {:?}", cond),
                     };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
+                    block_temps.insert(instr.result.clone(), result.clone());
+                    self.temps.insert(self.current_block, block_temps.clone());
                     self.pc += 1;
                 }
-                CIROp::LtOrEq(ty, left_id, right_id) => {
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Bool(l <= r),
-                        _ => panic!("Invalid types for Lt"),
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
-                }
-                CIROp::Eq(ty, left_id, right_id) => {
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Bool(l == r),
-                        _ => panic!("Invalid types for Eq"),
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
-                }
-                CIROp::Neq(ty, left_id, right_id) => {
-                    let right = self.temps[&self.current_block][right_id].clone();
-                    let left = self.temps[&self.current_block][left_id].clone();
-                    let result = match (left, right) {
-                        (CirValue::Int(l), CirValue::Int(r)) => CirValue::Bool(l != r),
-                        _ => panic!("Invalid types for Neq"),
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
+                CIROp::LtOrEq(_, left_id, right_id) => {
+                    let left = block_temps.get(left_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            left_id.0, self.current_block
+                        )
+                    });
+                    let right = block_temps.get(right_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            right_id.0, self.current_block
+                        )
+                    });
+                    if let (CirValue::Int(l), CirValue::Int(r)) = (left, right) {
+                        block_temps.insert(instr.result.clone(), CirValue::Bool(l <= r));
+                        self.temps.insert(self.current_block, block_temps.clone());
+                    }
                     self.pc += 1;
                 }
                 CIROp::Branch(cond_id, then_label, else_label) => {
-                    let cond = self.temps[&self.current_block][cond_id].clone();
-                    let label = match cond {
-                        CirValue::Bool(true) => then_label,
-                        CirValue::Bool(false) => else_label,
-                        _ => panic!("Invalid condition type for Branch"),
-                    };
-                    self.pc = self.label_map[&self.current_block][label];
-                    println!("Branching to {} at PC {}", label, self.pc);
+                    let cond = block_temps.get(cond_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Condition {} not found in block {}",
+                            cond_id.0, self.current_block
+                        )
+                    });
+                    println!(
+                        "run: Branching on cond {}: {:?}, then={}, else={}",
+                        cond_id.0, cond, then_label, else_label
+                    );
+                    let next_pc = match cond {
+                        CirValue::Bool(true) => block
+                            .instructions
+                            .iter()
+                            .position(|i| matches!(&i.op, CIROp::Label(l) if l == then_label)),
+                        CirValue::Bool(false) => block
+                            .instructions
+                            .iter()
+                            .position(|i| matches!(&i.op, CIROp::Label(l) if l == else_label)),
+                        _ => panic!("Invalid condition type for Branch: {:?}", cond),
+                    }
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Label {} or {} not found in block {}",
+                            then_label, else_label, self.current_block
+                        )
+                    });
+                    self.pc = next_pc;
                 }
                 CIROp::Label(label) => {
-                    println!("Label reached: {}", label);
-                    self.pc += 1;
+                    println!(
+                        "run: At label {} in block {} at PC {}",
+                        label, self.current_block, self.pc
+                    );
+                    self.pc += 1; // Move past the label
                 }
                 CIROp::Jump(label) => {
-                    self.pc = self.label_map[&self.current_block][label];
-                    println!("Jumping to {} at PC {}", label, self.pc);
-                }
-                CIROp::Select(cond_id, then_id, else_id) => {
-                    let cond = self.temps[&self.current_block][cond_id].clone();
-                    let then_val = self.temps[&self.current_block].get(then_id).cloned();
-                    let else_val = self.temps[&self.current_block].get(else_id).cloned();
-
-                    println!("DEBUG SELECT: Condition: {:?}", cond);
-                    println!("DEBUG SELECT: Then value: {:?}", then_val);
-                    println!("DEBUG SELECT: Else value: {:?}", else_val);
-
-                    let result = match cond {
-                        CirValue::Bool(true) => then_val.expect("Then branch value missing"),
-                        CirValue::Bool(false) => else_val.expect("Else branch value missing"),
-                        _ => panic!("Invalid condition type for Select"),
-                    };
-
-                    println!("DEBUG SELECT: Result: {:?}", result);
-
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
-                }
-                CIROp::Struct(ty, field_values) => {
-                    let fields: HashMap<String, CirValue> = field_values
+                    println!(
+                        "run: Jumping to label {} in block {} from PC {}",
+                        label, self.current_block, self.pc
+                    );
+                    let next_pc = block
+                        .instructions
                         .iter()
-                        .map(|(name, value_id)| {
-                            let value = self.temps[&self.current_block][value_id].clone();
-                            (name.clone(), value)
-                        })
-                        .collect();
-                    let result = CirValue::Struct(fields);
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
-                }
-                CIROp::GetField(base_id, field_name) => {
-                    let base = self.temps[&self.current_block][base_id].clone();
-                    let result = match base {
-                        CirValue::Struct(fields) => fields[field_name].clone(),
-                        _ => panic!("GetField on non-struct"),
-                    };
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
-                }
-                CIROp::List(element_ids) => {
-                    let elements: Vec<CirValue> = element_ids
-                        .iter()
-                        .map(|id| self.temps[&self.current_block][id].clone())
-                        .collect();
-                    let result = CirValue::List(elements);
-                    self.stack.push(result.clone());
-                    self.temps
-                        .get_mut(&self.current_block)
-                        .unwrap()
-                        .insert(instr.result.clone(), result);
-                    self.pc += 1;
-                }
-                // CIROp::Index(list_id, index_id) => {
-                //     let list = self.temps[&self.current_block][list_id].clone();
-                //     let index = self.temps[&self.current_block][index_id].clone();
-                //     let result = match (list, index) {
-                //         (CirValue::List(elements), CirValue::Int(i)) => elements
-                //             .get(i as usize)
-                //             .cloned()
-                //             .expect("Index out of bounds"),
-                //         _ => panic!("Invalid list or index type"),
-                //     };
-                //     self.stack.push(result.clone());
-                //     self.temps
-                //         .get_mut(&self.current_block)
-                //         .unwrap()
-                //         .insert(instr.result.clone(), result);
-                //     self.pc += 1;
-                // }
-                CIROp::Index(list_id, index_id) => {
-                    let list_val = self.temps[&self.current_block][list_id].clone();
-                    let index_val = self.temps[&self.current_block][index_id].clone();
-                    if let (CirValue::List(elements), CirValue::Int(index)) = (list_val, index_val)
-                    {
-                        if index >= 0 && (index as usize) < elements.len() {
-                            let result = elements[index as usize].clone();
-                            self.temps
-                                .get_mut(&self.current_block)
-                                .unwrap()
-                                .insert(instr.result.clone(), result);
-                            self.pc += 1;
-                        } else {
-                            panic!(
-                                "Index out of bounds: {} for list of length {}",
-                                index,
-                                elements.len()
-                            );
-                        }
-                    } else {
-                        panic!("Invalid list or index type");
-                    }
+                        .position(|i| matches!(&i.op, CIROp::Label(l) if l == label))
+                        .unwrap_or_else(|| {
+                            panic!("Label {} not found in block {}", label, self.current_block)
+                        });
+                    self.pc = next_pc;
                 }
                 CIROp::While {
                     guard,
                     body_start,
                     exit_label,
                 } => {
-                    let guard_val = self.temps[&self.current_block][guard].clone();
-                    match guard_val {
-                        CirValue::Bool(true) => {
-                            self.pc = self.label_map[&self.current_block][body_start];
-                        }
-                        CirValue::Bool(false) => {
-                            self.pc = self.label_map[&self.current_block][exit_label];
-                        }
-                        _ => panic!("While guard must be boolean"),
-                    }
+                    println!(
+                        "run: While with guard {}: {:?}, body_start={}, exit_label={}",
+                        guard.0,
+                        block_temps.get(guard),
+                        body_start,
+                        exit_label
+                    );
+                    let guard_val = block_temps.get(guard).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Guard {} not found in block {}",
+                            guard.0, self.current_block
+                        )
+                    });
+                    let next_pc = match guard_val {
+                        CirValue::Bool(true) => block
+                            .instructions
+                            .iter()
+                            .position(|i| matches!(&i.op, CIROp::Label(l) if l == body_start))
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Body label {} not found in block {}",
+                                    body_start, self.current_block
+                                )
+                            }),
+                        CirValue::Bool(false) => block
+                            .instructions
+                            .iter()
+                            .position(|i| matches!(&i.op, CIROp::Label(l) if l == exit_label))
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Exit label {} not found in block {}",
+                                    exit_label, self.current_block
+                                )
+                            }),
+                        _ => panic!("Invalid guard type for While: {:?}", guard_val),
+                    };
+                    self.pc = next_pc;
                 }
-                // ... oth
-                _ => unimplemented!("Instruction not yet supported"),
+                CIROp::List(elements) => {
+                    let list_vals: Vec<CirValue> = elements
+                        .iter()
+                        .map(|id| {
+                            block_temps.get(id).cloned().unwrap_or_else(|| {
+                                panic!("Element {} not found in block {}", id.0, self.current_block)
+                            })
+                        })
+                        .collect();
+                    block_temps.insert(instr.result.clone(), CirValue::List(list_vals));
+                    self.temps.insert(self.current_block, block_temps.clone());
+                    self.pc += 1;
+                }
+                CIROp::Index(list_id, index_id) => {
+                    let list = block_temps.get(list_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "List {} not found in block {}",
+                            list_id.0, self.current_block
+                        )
+                    });
+                    let index = block_temps.get(index_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Index {} not found in block {}",
+                            index_id.0, self.current_block
+                        )
+                    });
+                    if let (CirValue::List(vals), CirValue::Int(idx)) = (list, index) {
+                        let val = vals.get(idx as usize).cloned().unwrap_or_else(|| {
+                            panic!(
+                                "Index {} out of bounds in block {}",
+                                idx, self.current_block
+                            )
+                        });
+                        block_temps.insert(instr.result.clone(), val);
+                        self.temps.insert(self.current_block, block_temps.clone());
+                    }
+                    self.pc += 1;
+                }
+                CIROp::Store(target_id, value_id) => {
+                    println!(
+                        "run: Storing {} into {} in block {}",
+                        value_id.0, target_id.0, self.current_block
+                    );
+                    let value = block_temps.get(value_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            value_id.0, self.current_block
+                        )
+                    });
+                    block_temps.insert(target_id.clone(), value);
+                    self.temps.insert(self.current_block, block_temps.clone());
+                    self.pc += 1;
+                }
+                CIROp::StoreAt(target_id, index_id, value_id) => {
+                    println!(
+                        "run: Storing {} at {}[{}] in block {}",
+                        value_id.0, target_id.0, index_id.0, self.current_block
+                    );
+                    let target = block_temps.get(target_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Target {} not found in block {}",
+                            target_id.0, self.current_block
+                        )
+                    });
+                    let index = block_temps.get(index_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Index {} not found in block {}",
+                            index_id.0, self.current_block
+                        )
+                    });
+                    let value = block_temps.get(value_id).cloned().unwrap_or_else(|| {
+                        panic!(
+                            "Value {} not found in block {}",
+                            value_id.0, self.current_block
+                        )
+                    });
+                    if let (CirValue::List(mut vals), CirValue::Int(idx)) = (target, index) {
+                        if idx as usize >= vals.len() {
+                            panic!(
+                                "Index {} out of bounds in block {}",
+                                idx, self.current_block
+                            );
+                        }
+                        vals[idx as usize] = value;
+                        block_temps.insert(target_id.clone(), CirValue::List(vals));
+                        self.temps.insert(self.current_block, block_temps.clone());
+                    } else {
+                        panic!(
+                            "StoreAt requires a list target and int index in block {}",
+                            self.current_block
+                        );
+                    }
+                    self.pc += 1;
+                }
+                _ => unimplemented!("Instruction not yet supported: {:?}", instr.op),
             }
         }
         println!("Interpreter finished with no result");
         None
+    }
+
+    fn get_value(&self, id: &ValueId) -> CirValue {
+        self.temps
+            .get(&self.current_block)
+            .and_then(|block_temps| block_temps.get(id))
+            .cloned()
+            .unwrap_or_else(|| panic!("Value {} not found in block {}", id.0, self.current_block))
     }
 }

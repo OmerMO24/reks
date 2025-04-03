@@ -33,6 +33,7 @@ pub enum TypedExprKind<'src> {
     Call {
         name: Box<TypedExpr<'src>>,
         args: Vec<TypedExpr<'src>>,
+        compeval: bool,
     },
     BinOp {
         left: Box<TypedExpr<'src>>,
@@ -334,12 +335,17 @@ impl<'src> TypeInferencer {
                 retty: Box::new(self.convert_to_typed_ast(retty)),
                 body: Box::new(self.convert_to_typed_ast(body)),
             },
-            UntypedExpr::Call { name, args } => TypedExprKind::Call {
+            UntypedExpr::Call {
+                name,
+                args,
+                compeval,
+            } => TypedExprKind::Call {
                 name: Box::new(self.convert_to_typed_ast(name)),
                 args: args
                     .iter()
                     .map(|arg| self.convert_to_typed_ast(arg))
                     .collect(),
+                compeval: *compeval,
             },
             UntypedExpr::BinOp { left, op, right } => TypedExprKind::BinOp {
                 left: Box::new(self.convert_to_typed_ast(left)),
@@ -518,7 +524,11 @@ impl<'src> TypeInferencer {
                     },
                 )
             }
-            TypedExprKind::Call { name, args } => {
+            TypedExprKind::Call {
+                name,
+                args,
+                compeval,
+            } => {
                 let name_typed = self.infer_expr(*name)?;
                 let func_type = name_typed.type_info.clone().into_type().unwrap();
 
@@ -538,6 +548,7 @@ impl<'src> TypeInferencer {
                     TypedExprKind::Call {
                         name: Box::new(name_typed),
                         args: typed_args,
+                        compeval,
                     },
                 )
             }
@@ -561,7 +572,8 @@ impl<'src> TypeInferencer {
                     InfixOpKind::Equals
                     | InfixOpKind::NotEq
                     | InfixOpKind::Greater
-                    | InfixOpKind::Less => {
+                    | InfixOpKind::Less
+                    | InfixOpKind::LessOrEq => {
                         self.subst = unify(&t_left, &t_right, &self.subst)?;
                         Type::Bool
                     }

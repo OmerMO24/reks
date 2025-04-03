@@ -19,6 +19,8 @@ where
         let ident =
             select! { Token::TOKEN_IDENT(name) => name }.map(|name| Value::Identifier(name));
 
+        let compeval = just(Token::TOKEN_COMP_EVAL).or_not();
+
         let path = just(Token::TOKEN_COLON)
             .ignore_then(ident)
             .map(|annotation| TypePath::Typed { ident: annotation })
@@ -70,17 +72,65 @@ where
                 else_branch: Box::new(else_),
             });
 
-        let atom = unit.or(list).or(_let).or(if_statement).or(expr
-            .clone()
-            .delimited_by(just(Token::TOKEN_L_PAREN), just(Token::TOKEN_R_PAREN)));
+        let while_loop = just(Token::TOKEN_WHILE)
+            .ignore_then(expr.clone())
+            .then(block.clone())
+            .map(|(guard_, body_)| utnode::UntypedExpr::While {
+                guard: Box::new(guard_),
+                body: Box::new(body_),
+            });
 
-        let call = atom
-            .clone()
+        // let struct_init = ident
+        //     .then(
+        //         just(Token::TOKEN_L_BRACE)
+        //             .ignore_then(
+        //                 ident
+        //                     .then_ignore(just(Token::TOKEN_COLON))
+        //                     .then(expr.clone())
+        //                     .map(|(field_name, field_value)| (field_name, field_value))
+        //                     .separated_by(just(Token::TOKEN_COMMA))
+        //                     .allow_trailing()
+        //                     .collect::<Vec<_>>(),
+        //             )
+        //             .then_ignore(just(Token::TOKEN_R_BRACE)),
+        //     )
+        //     .map(|(struct_name, fields)| utnode::UntypedExpr::StructInit {
+        //         id: struct_name,
+        //         fields,
+        //     });
+
+        let atom = unit
+            .or(list)
+            .or(_let)
+            .or(if_statement)
+            .or(while_loop)
+            //.or(struct_init)
+            .or(expr
+                .clone()
+                .delimited_by(just(Token::TOKEN_L_PAREN), just(Token::TOKEN_R_PAREN)));
+
+        let call = compeval
+            .then(atom.clone())
             .then(items.delimited_by(just(Token::TOKEN_L_PAREN), just(Token::TOKEN_R_PAREN)))
             .then_ignore(just(Token::TOKEN_SEMICOLON).or_not())
-            .map(|(func, args_)| utnode::UntypedExpr::Call {
+            .map(|((is_compeval, func), args_)| utnode::UntypedExpr::Call {
                 name: Box::new(func),
                 args: args_,
+                compeval: match is_compeval {
+                    Some(_) => true,
+                    None => false,
+                },
+            });
+
+        let index = atom
+            .clone()
+            .then(
+                expr.clone()
+                    .delimited_by(just(Token::TOKEN_L_BRACK), just(Token::TOKEN_R_BRACK)),
+            )
+            .map(|(expr_, index_)| utnode::UntypedExpr::Index {
+                expr: Box::new(expr_),
+                index: Box::new(index_),
             });
 
         // Simple field access (just a.b, no chaining)
@@ -106,7 +156,7 @@ where
 
         // let term = call.or(atom).or(unary);
 
-        let term = field_access.or(call).or(atom).or(unary);
+        let term = field_access.or(call).or(index).or(atom).or(unary);
 
         let prod_op = just(Token::TOKEN_MUL)
             .to(InfixOpKind::Mul)

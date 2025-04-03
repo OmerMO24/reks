@@ -240,6 +240,7 @@ pub fn test_llvm_function_calls() {
                         expr: Box::new(UntypedExpr::Call {
                             name: Box::new(UntypedExpr::Value(Value::Identifier("add_two"))),
                             args: vec![UntypedExpr::Value(Value::Identifier("a"))],
+                            compeval: false,
                         }),
                         constness: Const::No,
                     },
@@ -297,6 +298,7 @@ pub fn test_llvm_branching_new() {
                                 UntypedExpr::Value(Value::Identifier("x")),
                                 UntypedExpr::Value(Value::Num(42)),
                             ],
+                            compeval: false,
                         }),
                         constness: Const::No,
                     },
@@ -344,6 +346,220 @@ pub fn test_llvm_arrays() {
                         }),
                     },
                 ],
+            }),
+        },
+    ];
+
+    compile(test_program);
+}
+
+use crate::reks_parse::{operators::InfixOpKind, utnode::*};
+
+pub fn test_llvm_array_writes() {
+    let test_program = vec![
+        // fn main(x: i32) -> i32 { let arr = [x, 42]; arr[0] = 10; arr[0] + arr[1] }
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![Param {
+                name: Value::Identifier("x"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("arr"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::List {
+                            items: vec![
+                                UntypedExpr::Value(Value::Identifier("x")),
+                                UntypedExpr::Value(Value::Num(42)),
+                            ],
+                        }),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::Assign {
+                        left: Box::new(UntypedExpr::Index {
+                            expr: Box::new(UntypedExpr::Value(Value::Identifier("arr"))),
+                            index: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        }),
+                        right: Box::new(UntypedExpr::Value(Value::Num(10))),
+                    },
+                    UntypedExpr::BinOp {
+                        left: Box::new(UntypedExpr::Index {
+                            expr: Box::new(UntypedExpr::Value(Value::Identifier("arr"))),
+                            index: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        }),
+                        op: InfixOpKind::Add,
+                        right: Box::new(UntypedExpr::Index {
+                            expr: Box::new(UntypedExpr::Value(Value::Identifier("arr"))),
+                            index: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        }),
+                    },
+                ],
+            }),
+        },
+    ];
+
+    compile(test_program);
+}
+
+pub fn test_llvm_while_loops() {
+    let test_program = vec![
+        // fn main(x: i32) -> i32 { let arr = [x, 42]; let i = 0; while i < 2 { arr[i] = arr[i] + 1; i = i + 1; } arr[0] + arr[1] }
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![Param {
+                name: Value::Identifier("x"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("arr"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::List {
+                            items: vec![
+                                UntypedExpr::Value(Value::Identifier("x")),
+                                UntypedExpr::Value(Value::Num(42)),
+                            ],
+                        }),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("i"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::While {
+                        guard: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                            op: InfixOpKind::Less,
+                            right: Box::new(UntypedExpr::Value(Value::Num(2))),
+                        }),
+                        body: Box::new(UntypedExpr::Block {
+                            statements: vec![
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Index {
+                                        expr: Box::new(UntypedExpr::Value(Value::Identifier(
+                                            "arr",
+                                        ))),
+                                        index: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                    }),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Index {
+                                            expr: Box::new(UntypedExpr::Value(Value::Identifier(
+                                                "arr",
+                                            ))),
+                                            index: Box::new(UntypedExpr::Value(Value::Identifier(
+                                                "i",
+                                            ))),
+                                        }),
+                                        op: InfixOpKind::Add,
+                                        right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                                    }),
+                                },
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                        op: InfixOpKind::Add,
+                                        right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                                    }),
+                                },
+                            ],
+                        }),
+                    },
+                    UntypedExpr::BinOp {
+                        left: Box::new(UntypedExpr::Index {
+                            expr: Box::new(UntypedExpr::Value(Value::Identifier("arr"))),
+                            index: Box::new(UntypedExpr::Value(Value::Num(0))),
+                        }),
+                        op: InfixOpKind::Add,
+                        right: Box::new(UntypedExpr::Index {
+                            expr: Box::new(UntypedExpr::Value(Value::Identifier("arr"))),
+                            index: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        }),
+                    },
+                ],
+            }),
+        },
+    ];
+
+    compile(test_program);
+}
+
+pub fn test_llvm_factorial_with_call() {
+    let test_program = vec![
+        // fn factorial(n: i32) -> i32 { ... }
+        UntypedExpr::Fn {
+            name: Value::Identifier("factorial"),
+            params: vec![Param {
+                name: Value::Identifier("n"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Block {
+                statements: vec![
+                    UntypedExpr::Let {
+                        id: Value::Identifier("result"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::Let {
+                        id: Value::Identifier("i"),
+                        pat: TypePath::Empty,
+                        expr: Box::new(UntypedExpr::Value(Value::Identifier("n"))),
+                        constness: Const::No,
+                    },
+                    UntypedExpr::While {
+                        guard: Box::new(UntypedExpr::BinOp {
+                            left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                            op: InfixOpKind::Greater,
+                            right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                        }),
+                        body: Box::new(UntypedExpr::Block {
+                            statements: vec![
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("result"))),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier(
+                                            "result",
+                                        ))),
+                                        op: InfixOpKind::Mul,
+                                        right: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                    }),
+                                },
+                                UntypedExpr::Assign {
+                                    left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                    right: Box::new(UntypedExpr::BinOp {
+                                        left: Box::new(UntypedExpr::Value(Value::Identifier("i"))),
+                                        op: InfixOpKind::Sub,
+                                        right: Box::new(UntypedExpr::Value(Value::Num(1))),
+                                    }),
+                                },
+                            ],
+                        }),
+                    },
+                    UntypedExpr::Value(Value::Identifier("result")),
+                ],
+            }),
+        },
+        // fn main(n: i32) -> i32 { factorial(n) }
+        UntypedExpr::Fn {
+            name: Value::Identifier("main"),
+            params: vec![Param {
+                name: Value::Identifier("n"),
+                ty: Value::Identifier("i32"),
+            }],
+            retty: Box::new(UntypedExpr::Value(Value::Identifier("i32"))),
+            body: Box::new(UntypedExpr::Call {
+                name: Box::new(UntypedExpr::Value(Value::Identifier("factorial"))),
+                args: vec![UntypedExpr::Value(Value::Identifier("n"))],
+                compeval: false,
             }),
         },
     ];
